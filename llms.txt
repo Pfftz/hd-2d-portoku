@@ -1,0 +1,23 @@
+# HD-2D Portfolio
+
+> Interactive 2.5D (HD-2D) personal portfolio inspired by *Valkyrie Profile*'s flower-covered hilltop, pairing a 2D pixel-art sprite with a shader-driven 3D meadow, depth fog, and parallax layers.
+
+## Read First
+- [AGENTS.md](AGENTS.md): Strict operational, aesthetic, Z-depth, shader, and workflow rules.
+- [BRAIN.md](BRAIN.md): Active working memory, current phase, locked decisions, and vertical slice roadmap.
+- [.agents/rules/mcp-routing.md](.agents/rules/mcp-routing.md): MCP tool selection matrix, multi-tool chaining protocols, Graphify usage, and project mappings.
+
+## History
+- [CHANGELOG.md](CHANGELOG.md): Keep a Changelog milestone log under `[Unreleased]` and Semantic Versioning.
+
+## Planned Layout (not yet created)
+- `src/scene/`: Three.js rendering, custom GLSL shaders, unified wind system, lighting, and camera follow-lag.
+- `src/content/nodes.json`: All portfolio copy and interactive personal story nodes (never hardcoded in Three.js or UI components).
+- `public/assets/sprites/hero.png`: Hot-swappable `NearestFilter` alpha-cutout pixel-art hero spritesheet.
+- `public/assets/backdrop/castle.png`: Distant midground castle silhouette plane blended with `THREE.FogExp2`.
+- `public/assets/backdrop/clouds.png`: 2D parallax overcast cloud planes.
+- `public/assets/audio/theme.mp3`: User-supplied BGM faded in after first user interaction.
+
+## Optional
+- [.agents/rules/antigravity-rtk-rules.md](.agents/rules/antigravity-rtk-rules.md): RTK token-saving CLI rules installed by `rtk init --agent antigravity`.
+- `graphify-out/`: Agent-only codebase comprehension graph (git-ignored; first build after Slice 1).
