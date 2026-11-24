@@ -19,10 +19,11 @@ function makeCanvas(width: number, height: number): HTMLCanvasElement {
 }
 
 export function createHeroPlaceholderTexture(): THREE.CanvasTexture {
-  const { frameW, frameH, gutterPx, cellStridePx, idleFrames, walkFrames, footPivotY } =
+  const { frameH, gutterPx, cellStridePx, idleFrames, walkFrames, footPivotY } =
     ASSET_MANIFEST.sprite;
   const cols = Math.max(idleFrames, walkFrames);
   const rows = 2;
+  const footY = frameH - footPivotY;
   const canvas = makeCanvas(cols * cellStridePx, rows * cellStridePx);
   const ctx = canvas.getContext('2d');
 
@@ -33,39 +34,35 @@ export function createHeroPlaceholderTexture(): THREE.CanvasTexture {
       for (let col = 0; col < count; col += 1) {
         const ox = col * cellStridePx + gutterPx;
         const oy = row * cellStridePx + gutterPx;
-
-        // Cell frame guide
-        ctx.strokeStyle = 'rgba(201, 206, 214, 0.55)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(ox + 0.5, oy + 0.5, frameW - 1, frameH - 1);
-
-        // Lower tan-brown boots / skirt
-        ctx.fillStyle = '#9c7a54';
-        ctx.fillRect(ox + 24, oy + 40, 16, 18);
-
-        // Upper white + royal-blue tunic
-        ctx.fillStyle = '#f2efe4';
-        ctx.fillRect(ox + 22, oy + 24, 20, 16);
-        ctx.fillStyle = '#2b4c9b';
-        ctx.fillRect(ox + 25, oy + 25, 14, 15);
-
-        // Head + flowing cobalt/periwinkle hair (trailing right in wind)
-        ctx.fillStyle = '#e8d8c8';
-        ctx.fillRect(ox + 26, oy + 12, 10, 12);
+        const stride = row === 1 ? ((col % 3) - 1) * 2 : 0;
         const sway = row === 0 ? (col % 2) * 2 : (col % 3) - 1;
-        ctx.fillStyle = '#4e6cd4';
-        ctx.fillRect(ox + 26, oy + 9, 14, 7);
-        ctx.fillRect(ox + 33 + sway, oy + 14, 14, 20);
-        ctx.fillStyle = '#c8d6f8';
-        ctx.fillRect(ox + 27, oy + 10, 8, 2);
 
-        // Foot pivot line
+        // Lower tan-brown boots / hem anchored to footPivotY
+        ctx.fillStyle = '#6e5136';
+        ctx.fillRect(ox + 26 + stride, oy + footY - 11, 5, 11);
+        ctx.fillRect(ox + 33 - stride, oy + footY - 11, 5, 11);
+        ctx.fillStyle = '#9c7a54';
+        ctx.fillRect(ox + 24, oy + 39, 16, 11);
+
+        // Upper white + royal-blue tunic (left 3/4 profile)
         ctx.fillStyle = '#f2efe4';
-        ctx.fillRect(ox + 20, oy + frameH - footPivotY, 24, 1);
+        ctx.fillRect(ox + 23, oy + 25, 17, 15);
+        ctx.fillStyle = '#2b4c9b';
+        ctx.fillRect(ox + 25, oy + 26, 13, 14);
+        ctx.fillStyle = '#d4b468';
+        ctx.fillRect(ox + 25, oy + 38, 14, 2);
 
-        ctx.fillStyle = '#141820';
-        ctx.font = 'bold 9px monospace';
-        ctx.fillText(`${row === 0 ? 'I' : 'W'}${col}`, ox + 4, oy + 11);
+        // Head + flowing periwinkle-to-cobalt hair trailing right
+        ctx.fillStyle = '#ebd8c7';
+        ctx.fillRect(ox + 25, oy + 14, 10, 11);
+        ctx.fillStyle = '#4e6cd4';
+        ctx.fillRect(ox + 24, oy + 10, 14, 6);
+        ctx.fillRect(ox + 33, oy + 14, 10, 16);
+        ctx.fillRect(ox + 39 + sway, oy + 19, 10, 18);
+        ctx.fillRect(ox + 44 + sway, oy + 26, 7, 13);
+        ctx.fillStyle = '#c8d6f8';
+        ctx.fillRect(ox + 26, oy + 12, 8, 2);
+        ctx.fillRect(ox + 36, oy + 17, 4, 8);
       }
     }
   }
@@ -96,70 +93,133 @@ export function createPlatePlaceholderTexture(
   if (ctx) {
     ctx.clearRect(0, 0, w, h);
     if (key === 'citadel') {
-      ctx.fillStyle = 'rgba(220, 225, 232, 0.88)';
-      ctx.fillRect(w * 0.08, h * 0.25, w * 0.72, h * 0.55);
-      ctx.fillStyle = 'rgba(74, 85, 104, 0.85)';
-      ctx.fillRect(w * 0.05, h * 0.65, w * 0.85, h * 0.35);
-      ctx.fillStyle = 'rgba(235, 238, 242, 0.92)';
-      ctx.fillRect(w * 0.22, h * 0.08, w * 0.08, h * 0.3);
-      ctx.fillRect(w * 0.45, h * 0.12, w * 0.1, h * 0.28);
-    } else if (key === 'ghostCastle') {
-      ctx.fillStyle = 'rgba(201, 206, 214, 0.52)';
-      ctx.fillRect(w * 0.25, h * 0.35, w * 0.5, h * 0.55);
-      ctx.fillRect(w * 0.42, h * 0.14, w * 0.14, h * 0.3);
-    } else if (key === 'watchtower') {
-      ctx.fillStyle = 'rgba(78, 84, 74, 0.9)';
-      ctx.fillRect(w * 0.25, h * 0.32, w * 0.08, h * 0.58);
-      ctx.fillRect(w * 0.48, h * 0.22, w * 0.24, h * 0.68);
+      // Tiered silver-white Gothic citadel spires descending right toward sage foothills
+      ctx.fillStyle = 'rgba(220, 224, 232, 0.9)';
+      ctx.fillRect(0, h * 0.24, w * 0.62, h * 0.44);
+      ctx.fillRect(w * 0.48, h * 0.36, w * 0.26, h * 0.34);
+      ctx.fillStyle = 'rgba(236, 238, 242, 0.94)';
+      const spires = [0.06, 0.16, 0.28, 0.41, 0.56];
+      for (const sx of spires) {
+        ctx.fillRect(w * sx, h * 0.08, w * 0.06, h * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(w * (sx - 0.01), h * 0.08);
+        ctx.lineTo(w * (sx + 0.03), h * 0.01);
+        ctx.lineTo(w * (sx + 0.07), h * 0.08);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(74, 85, 104, 0.72)';
+      ctx.fillRect(0, h * 0.44, w * 0.72, h * 0.24);
+      ctx.fillStyle = 'rgba(91, 110, 93, 0.85)';
       ctx.beginPath();
-      ctx.moveTo(w * 0.44, h * 0.22);
-      ctx.lineTo(w * 0.6, h * 0.06);
-      ctx.lineTo(w * 0.76, h * 0.22);
+      ctx.moveTo(0, h * 0.6);
+      ctx.lineTo(w * 0.42, h * 0.64);
+      ctx.lineTo(w * 0.94, h * 0.92);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fill();
+    } else if (key === 'ghostCastle') {
+      const grad = ctx.createLinearGradient(0, h * 0.1, 0, h * 0.92);
+      grad.addColorStop(0, 'rgba(201, 206, 214, 0.52)');
+      grad.addColorStop(1, 'rgba(242, 239, 228, 0.05)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(w * 0.24, h * 0.36, w * 0.52, h * 0.54);
+      ctx.fillRect(w * 0.42, h * 0.12, w * 0.16, h * 0.26);
+      ctx.fillRect(w * 0.28, h * 0.22, w * 0.09, h * 0.18);
+      ctx.fillRect(w * 0.63, h * 0.25, w * 0.09, h * 0.16);
+    } else if (key === 'watchtower') {
+      // Slender dark olive-grey obelisk (left) + tall stepped watchtower (right)
+      ctx.fillStyle = 'rgba(74, 80, 70, 0.9)';
+      ctx.beginPath();
+      ctx.moveTo(w * 0.12, h * 0.92);
+      ctx.lineTo(w * 0.15, h * 0.44);
+      ctx.lineTo(w * 0.18, h * 0.44);
+      ctx.lineTo(w * 0.21, h * 0.92);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillRect(w * 0.48, h * 0.28, w * 0.36, h * 0.68);
+      ctx.fillStyle = 'rgba(92, 98, 86, 0.92)';
+      ctx.fillRect(w * 0.54, h * 0.16, w * 0.24, h * 0.14);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.52, h * 0.16);
+      ctx.lineTo(w * 0.66, h * 0.03);
+      ctx.lineTo(w * 0.8, h * 0.16);
       ctx.closePath();
       ctx.fill();
     } else if (key === 'clouds') {
-      ctx.fillStyle = 'rgba(242, 239, 228, 0.78)';
-      for (let i = 0; i < 6; i += 1) {
+      // Single continuous periodic cloud-bank contour so WrapS repeats cleanly with zero arc seams
+      const cloudGrad = ctx.createLinearGradient(0, h * 0.16, 0, h);
+      cloudGrad.addColorStop(0, 'rgba(242, 239, 228, 0.0)');
+      cloudGrad.addColorStop(0.24, 'rgba(242, 239, 228, 0.86)');
+      cloudGrad.addColorStop(0.84, 'rgba(235, 231, 220, 0.94)');
+      cloudGrad.addColorStop(1, 'rgba(235, 231, 220, 0.0)');
+      ctx.fillStyle = cloudGrad;
+
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w; x += 6) {
+        const u = x / w;
+        const crestY =
+          h *
+          (0.45 -
+            0.14 * Math.sin(2 * Math.PI * (u - 0.5)) -
+            0.05 * Math.sin(4 * Math.PI * u + 0.7) -
+            0.03 * Math.cos(6 * Math.PI * u));
+        ctx.lineTo(x, crestY);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fill();
+    } else if (key === 'foregroundLip') {
+      // Soft pre-feathered bottom lip framing foreground leaves without occluding back-slope lilies
+      const meadowGrad = ctx.createLinearGradient(0, h * 0.38, 0, h);
+      meadowGrad.addColorStop(0, 'rgba(78, 96, 80, 0.0)');
+      meadowGrad.addColorStop(0.32, 'rgba(66, 82, 68, 0.28)');
+      meadowGrad.addColorStop(0.7, 'rgba(54, 68, 56, 0.62)');
+      meadowGrad.addColorStop(1, 'rgba(44, 56, 46, 0.84)');
+      ctx.fillStyle = meadowGrad;
+      ctx.fillRect(0, h * 0.38, w, h * 0.62);
+
+      for (let i = 0; i < w; i += 22) {
+        const hash = Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1;
+        const tipY = h * (0.44 + hash * 0.14);
+        const lean = (hash - 0.5) * 24;
+        ctx.fillStyle =
+          i % 44 === 0 ? 'rgba(84, 102, 86, 0.48)' : 'rgba(62, 78, 64, 0.55)';
         ctx.beginPath();
-        ctx.arc((i + 0.5) * (w / 6), h * 0.58, w / 9, 0, Math.PI * 2);
+        ctx.moveTo(i - 9, h);
+        ctx.quadraticCurveTo(i + lean * 0.3 - 10, tipY + h * 0.16, i + lean, tipY);
+        ctx.quadraticCurveTo(i + lean * 0.5 + 10, tipY + h * 0.18, i + 10, h);
+        ctx.closePath();
         ctx.fill();
       }
-    } else if (key === 'foregroundLip') {
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, 'rgba(91, 110, 93, 0)');
-      grad.addColorStop(0.38, 'rgba(91, 110, 93, 0.72)');
-      grad.addColorStop(1, 'rgba(74, 90, 76, 0.96)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = 'rgba(242, 239, 228, 0.72)';
-      for (let x = 24; x < w; x += 48) {
-        ctx.fillRect(x, h * 0.32, 6, 8);
+
+      for (let x = 18; x < w; x += 36) {
+        const seed = Math.abs(Math.sin(x * 78.233) * 19341.1) % 1;
+        const topY = h * (0.58 + seed * 0.24);
+        ctx.fillStyle = 'rgba(242, 239, 228, 0.55)';
+        for (let b = 0; b < 2; b += 1) {
+          ctx.beginPath();
+          ctx.arc(x + b * 7, topY + b * 10, 4.2 - b * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 
-    // Calibration frame + label
-    ctx.strokeStyle = 'rgba(74, 85, 104, 0.65)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(2, 2, w - 4, h - 4);
-
-    const horizonPx = Math.round((1 - spec.horizonY) * h);
-    ctx.setLineDash([8, 6]);
-    ctx.strokeStyle = 'rgba(242, 239, 228, 0.75)';
-    ctx.beginPath();
-    ctx.moveTo(0, horizonPx);
-    ctx.lineTo(w, horizonPx);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = 'rgba(20, 24, 32, 0.78)';
-    ctx.fillRect(8, 8, Math.min(w - 16, 290), 26);
-    ctx.fillStyle = '#f2efe4';
-    ctx.font = 'bold 13px monospace';
-    ctx.fillText(
-      `[PLACEHOLDER: ${key}] ${spec.worldWidth.toFixed(1)}x${spec.worldHeight.toFixed(1)}u`,
-      14,
-      26,
-    );
+    if (key !== 'foregroundLip' && key !== 'clouds') {
+      const labelX = key === 'citadel' ? Math.round(w * 0.28) : 8;
+      const boxW = Math.min(w - labelX - 8, 250);
+      ctx.fillStyle = 'rgba(20, 24, 32, 0.65)';
+      ctx.fillRect(labelX, 8, boxW, 22);
+      ctx.fillStyle = '#f2efe4';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(
+        `[PLACEHOLDER: ${key}] ${spec.worldWidth.toFixed(0)}x${spec.worldHeight.toFixed(0)}u`,
+        labelX + 6,
+        23,
+      );
+    }
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -168,6 +228,181 @@ export function createPlatePlaceholderTexture(
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
   }
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export function createFoliagePlaceholderTexture(
+  kind: 'leaves' | 'bells',
+): THREE.CanvasTexture {
+  const { cols, rows, cellPx } = ASSET_MANIFEST.foliage;
+  const canvas = makeCanvas(cols * cellPx, rows * cellPx);
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const drawBlade = (
+      ox: number,
+      oy: number,
+      rootX: number,
+      tipX: number,
+      tipY: number,
+      halfW: number,
+      color: string,
+      veinColor?: string,
+    ): void => {
+      const baseY = oy + cellPx - 2;
+      const midY = (baseY + tipY) * 0.5;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(ox + rootX - 4, baseY);
+      ctx.quadraticCurveTo(ox + (rootX + tipX) * 0.5 - halfW, midY - 6, ox + tipX, oy + tipY);
+      ctx.quadraticCurveTo(ox + (rootX + tipX) * 0.5 + halfW, midY + 4, ox + rootX + 4, baseY);
+      ctx.closePath();
+      ctx.fill();
+
+      if (veinColor) {
+        ctx.strokeStyle = veinColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(ox + rootX, baseY - 2);
+        ctx.quadraticCurveTo(ox + (rootX + tipX) * 0.5, midY, ox + tipX, oy + tipY + 6);
+        ctx.stroke();
+      }
+    };
+
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const ox = col * cellPx;
+        const oy = row * cellPx;
+        const variant = row * cols + col;
+
+        if (kind === 'leaves') {
+          const leanSign = variant % 2 === 0 ? 1 : -1;
+          drawBlade(ox, oy, 56, 36 + leanSign * 14, 16, 17, '#4c604f');
+          drawBlade(
+            ox,
+            oy,
+            66,
+            78 + leanSign * 12,
+            10,
+            18,
+            '#5b6e5d',
+            'rgba(182, 198, 180, 0.38)',
+          );
+          drawBlade(
+            ox,
+            oy,
+            74,
+            96 - leanSign * 16,
+            24,
+            15,
+            '#6c806d',
+            'rgba(196, 210, 192, 0.34)',
+          );
+          drawBlade(ox, oy, 62, 54 - leanSign * 12, 34, 14, '#546856');
+        } else {
+          const lean = variant % 2 === 0 ? 1 : -1;
+          const archTipX = 64 + lean * 28;
+          const archTipY = 18 + (variant % 3) * 4;
+
+          // Subtle support leaf behind the bell raceme
+          drawBlade(ox, oy, 58, 44 - lean * 10, 26, 14, '#4e6250');
+
+          // Slender arching stem
+          ctx.strokeStyle = '#5c705e';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(ox + 64, oy + cellPx - 2);
+          ctx.quadraticCurveTo(ox + 62 + lean * 8, oy + 52, ox + archTipX, oy + archTipY);
+          ctx.stroke();
+
+          // Nodding ivory lily-of-the-valley bells along the stem
+          const bellCount = 4;
+          for (let b = 0; b < bellCount; b += 1) {
+            const t = 0.36 + (b / (bellCount - 1)) * 0.58;
+            const inv = 1 - t;
+            const sx =
+              inv * inv * (ox + 64) +
+              2 * inv * t * (ox + 62 + lean * 8) +
+              t * t * (ox + archTipX);
+            const sy =
+              inv * inv * (oy + cellPx - 2) +
+              2 * inv * t * (oy + 52) +
+              t * t * (oy + archTipY);
+            const dropY = sy + 9;
+            const dropX = sx + lean * (4 + b * 2);
+
+            ctx.strokeStyle = '#627664';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(dropX, dropY - 4);
+            ctx.stroke();
+
+            ctx.fillStyle = '#f2efe4';
+            ctx.beginPath();
+            ctx.arc(dropX, dropY, 7.2 - b * 0.5, Math.PI, 0, false);
+            ctx.lineTo(dropX + (7 - b * 0.5), dropY + 7);
+            ctx.lineTo(dropX + (3.5 - b * 0.3), dropY + 4.5);
+            ctx.lineTo(dropX, dropY + 7.5);
+            ctx.lineTo(dropX - (3.5 - b * 0.3), dropY + 4.5);
+            ctx.lineTo(dropX - (7 - b * 0.5), dropY + 7);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(201, 206, 214, 0.55)';
+            ctx.beginPath();
+            ctx.arc(dropX, dropY + 2.5, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export function createPetalPlaceholderTexture(): THREE.DataTexture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  const cos = Math.cos(0.35);
+  const sin = Math.sin(0.35);
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const dx = x - 31.5;
+      const dy = y - 31.5;
+      const rx = dx * cos - dy * sin;
+      const ry = dx * sin + dy * cos;
+      const dist = Math.hypot(rx / 22, ry / 13);
+      const t = Math.min(1, dist);
+
+      // Warm-ivory RGB kept non-black even at alpha=0 to prevent bilinear edge haloing
+      const r = Math.round(248 - t * 16);
+      const g = Math.round(245 - t * 18);
+      const b = Math.round(236 - t * 21);
+      const a = dist >= 1 ? 0 : Math.round(255 * Math.min(1, (1 - dist) * 2.4));
+
+      const idx = (y * size + x) * 4;
+      data[idx] = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = a;
+    }
+  }
+
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
   return texture;
 }

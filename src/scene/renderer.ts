@@ -26,6 +26,7 @@ declare global {
 export interface SceneRendererHandle extends DiagRecorder {
   renderer: THREE.WebGLRenderer;
   debugEnabled: boolean;
+  activeAlphaTest: 0.3 | 0.5;
   updateDebugReadout: (info: { heroT: number; guidesVisible: boolean }) => void;
   resize: (width: number, height: number) => void;
   triggerSimulatedContextLossIfRequested: () => void;
@@ -140,6 +141,7 @@ export function createSceneRenderer(options: SceneRendererOptions): SceneRendere
   return {
     renderer,
     debugEnabled,
+    activeAlphaTest: diag.activeAlphaTest,
     assetSources: diag.assetSources,
     recordEvent,
     resize(width, height) {

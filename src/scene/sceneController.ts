@@ -2,10 +2,14 @@ import * as THREE from 'three';
 import type { AppStateController } from '../state/appState.ts';
 import type { InputRouterHandle } from '../input/inputRouter.ts';
 import { createCameraRig } from './camera.ts';
+import { createFoliageController } from './foliage.ts';
 import { createHeroController } from './hero.ts';
 import { RIDGE_LENGTH, WALK_SPEED, computeEndpointDamping, sampleRidge } from './layout.ts';
+import { createPetalsController } from './petals.ts';
 import { createPlatesController } from './plates.ts';
 import type { SceneRendererHandle } from './renderer.ts';
+import { createWindClock } from './shaders/wind.glsl.ts';
+import { createSkyDome } from './sky.ts';
 
 export interface SceneController {
   getCamera: () => THREE.PerspectiveCamera;
@@ -25,13 +29,29 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
   const { rendererHandle, appState, getInputRouter } = deps;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#ddd8cc');
+  scene.fog = new THREE.FogExp2('#d2d6dc', 0.011);
 
+  const windClock = createWindClock();
   const cameraRig = createCameraRig(window.innerWidth, window.innerHeight);
-  const plates = createPlatesController(rendererHandle, rendererHandle.debugEnabled);
+  const sky = createSkyDome();
+  const foliage = createFoliageController({
+    diag: rendererHandle,
+    windUniforms: windClock.uniforms,
+    activeAlphaTest: rendererHandle.activeAlphaTest,
+  });
+  const plates = createPlatesController(
+    rendererHandle,
+    rendererHandle.debugEnabled,
+    windClock.uniforms,
+  );
   const hero = createHeroController(rendererHandle);
+  const petals = createPetalsController(windClock.uniforms);
 
+  scene.add(sky.mesh);
+  scene.add(foliage.group);
   scene.add(plates.group);
   scene.add(hero.mesh);
+  scene.add(petals.mesh);
 
   let rafId = 0;
   let lastTimeMs = 0;
@@ -95,6 +115,8 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
     const state = appState.getState();
     const ridgePoint = sampleRidge(state.heroT);
 
+    windClock.update(dt, state.reducedMotion);
+
     hero.update({
       t: state.heroT,
       facingDir: state.facingDir,
@@ -113,7 +135,9 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
       dt,
     });
 
-    plates.update(cameraRig.getBaseCameraX());
+    const baseCameraX = cameraRig.getBaseCameraX();
+    plates.update(baseCameraX);
+    petals.update(baseCameraX);
     rendererHandle.renderer.render(scene, cameraRig.camera);
     rendererHandle.updateDebugReadout({
       heroT: state.heroT,
@@ -145,7 +169,10 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
       window.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('resize', onResize);
       hero.dispose();
+      petals.dispose();
+      foliage.dispose();
       plates.dispose();
+      sky.dispose();
       rendererHandle.dispose();
     },
   };

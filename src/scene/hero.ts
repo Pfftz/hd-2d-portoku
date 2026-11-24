@@ -33,6 +33,7 @@ export function createHeroController(diag: DiagRecorder): HeroController {
     alphaTest: 0.5,
     side: THREE.DoubleSide,
     transparent: false,
+    fog: false,
   });
 
   const mesh = new THREE.Mesh(geometry, material);

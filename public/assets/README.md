@@ -25,18 +25,18 @@ Use `?debug=1` (and press `G` or click **Alignment Guides**) to inspect plate bo
 
 Export all backdrop plates as **WebP with alpha** (`.png` paths are probed automatically on `.webp` 404 for local testing; target `< 2.5 MB` combined across all 5 plates):
 
-*   `public/assets/backdrop/citadel.webp` (`z: -55`, `parallax: 0.78`, `fogMix: 0.18`): Far-left silver-white Gothic citadel on cliffs. Tight silhouette crop.
-*   `public/assets/backdrop/ghost-castle.webp` (`z: -60`, `parallax: 0.85`, `fogMix: 0.25`): Far-center faint spired silhouette behind clouds. Tight silhouette crop.
-*   `public/assets/backdrop/watchtower.webp` (`z: -32`, `parallax: 0.55`, `fogMix: 0.12`): Right-midground olive-grey stone watchtower + solitary obelisk. Tight silhouette crop.
-*   `public/assets/backdrop/clouds.webp` (`z: -42`, `parallax: 0.70`, `fogMix: 0.0`, `worldWidth: 104`, `worldHeight: 28`): **Horizontally tileable (`tileX: true`)** rolling creamy-white cloud bank.
-*   `public/assets/backdrop/foreground-lip.webp` (`z: 1.8`, `parallax: 0.0`, `fogMix: 0.0`, `worldWidth: 64`, `worldHeight: 5`): Full-width **pre-softened** bottom lily strip rendered in front of the hero's knees (`renderOrder: 10`).
+*   `public/assets/backdrop/citadel.webp` (`z: -55`, `parallax: 0.78`, `fogMix: 0.18`, `offsetX: -23.0`, `offsetY: 3.0`, `worldWidth: 30`, `worldHeight: 29`): Far-left silver-white Gothic citadel on cliffs extending past the left 4:3 edge. Tight silhouette crop.
+*   `public/assets/backdrop/ghost-castle.webp` (`z: -60`, `parallax: 0.85`, `fogMix: 0.25`, `offsetX: 12.0`, `offsetY: 5.0`, `worldWidth: 14`, `worldHeight: 16`): Distant right-of-center faint spired silhouette behind clouds. Tight silhouette crop.
+*   `public/assets/backdrop/watchtower.webp` (`z: -36`, `parallax: 0.60`, `fogMix: 0.12`, `offsetX: 19.5`, `offsetY: 6.5`, `worldWidth: 13`, `worldHeight: 22`): Right-midground olive-grey stone watchtower + solitary obelisk behind the cloud bank. Tight silhouette crop.
+*   `public/assets/backdrop/clouds.webp` (`z: -28`, `parallax: 0.50`, `fogMix: 0.0`, `offsetY: 1.0`, `worldWidth: 96`, `worldHeight: 17`): **Horizontally tileable (`tileX: true`)** rolling creamy-white cloud bank (`96 >= minPlateWidth(-28, 0.50) = 81.92`).
+*   `public/assets/backdrop/foreground-lip.webp` (`z: 1.8`, `parallax: 0.0`, `fogMix: 0.0`, `offsetY: -2.8`, `worldWidth: 64`, `worldHeight: 8`): Full-width **pre-softened** bottom lily strip rendered in front of the hero's knees (`renderOrder: 10`).
 
 ## 3. Hero Spritesheet (`public/assets/sprites/hero.png`)
 
 *   **Frame Grid:** `64 x 64 px` artwork inside `68 x 68 px` padded cells (`2 px` transparent gutter on all four sides of each frame so `NearestFilter` never bleeds neighbor pixels).
 *   **Row 0 (Idle Wind Loop):** `4` frames (`6 FPS`), facing left in three-quarter profile, body still, hair and garments rippling right.
 *   **Row 1 (Walk Cycle):** `6` frames (`10 FPS`), facing left (engine mirrors via `scale.x = -1` when walking right).
-*   **Foot Anchor:** `footPivotY = 4` pixels above the frame's bottom edge (`2.2 x 2.2` world units at `z = 0`).
+*   **Foot Anchor:** `footPivotY = 4` pixels above the frame's bottom edge (`3.0 x 3.0` world units at `z = 0`).
 
 ## 4. Foliage Atlases & Landmarks
 

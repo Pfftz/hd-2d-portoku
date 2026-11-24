@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import { ASSET_MANIFEST, type PlateKey } from '../assets/manifest.ts';
 import {
+  BASE_CAMERA_Z,
+  BASE_FOV,
+  BASE_TARGET_Y,
   HORIZON_Y,
-  RIDGE_LENGTH,
-  SAFE_WIDTH,
-  sampleRidge,
+  SAFE_ASPECT,
 } from './layout.ts';
 import {
   createPlatePlaceholderTexture,
   loadTextureWithPlaceholder,
   type DiagRecorder,
 } from './placeholders.ts';
+import type { WindUniforms } from './shaders/wind.glsl.ts';
 
 export interface PlatesController {
   group: THREE.Group;
@@ -21,12 +23,14 @@ export interface PlatesController {
   dispose: () => void;
 }
 
-function createFogMixMaterial(
+function createPlateMaterial(
   map: THREE.Texture,
   fogMix: number,
   debugKey: PlateKey,
+  windUniforms: WindUniforms,
 ): { material: THREE.MeshBasicMaterial; setMap: (tex: THREE.Texture) => void } {
   const useFog = fogMix > 0;
+  const isDriftCloud = debugKey === 'clouds';
   const material = new THREE.MeshBasicMaterial({
     map,
     transparent: true,
@@ -52,6 +56,20 @@ function createFogMixMaterial(
         );
     };
     material.customProgramCacheKey = () => `plate-fog-mix-${debugKey}`;
+  } else if (isDriftCloud) {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uDriftOffset = windUniforms.uDriftOffset;
+      shader.vertexShader =
+        'uniform float uDriftOffset;\n' +
+        shader.vertexShader.replace(
+          '#include <uv_vertex>',
+          `#include <uv_vertex>
+          #ifdef USE_MAP
+            vMapUv.x += uDriftOffset * 0.015;
+          #endif`,
+        );
+    };
+    material.customProgramCacheKey = () => 'cloud-drift';
   }
 
   return {
@@ -63,49 +81,15 @@ function createFogMixMaterial(
   };
 }
 
-function createSlice1RidgeMesh(): {
-  mesh: THREE.Mesh;
-  dispose: () => void;
-} {
-  // ponytail: simple curved hilltop strip until Slice 2 builds full 3D foliage meadow
-  const segments = 48;
-  const width = RIDGE_LENGTH + 12;
-  const depth = 10;
-  const geometry = new THREE.PlaneGeometry(width, depth, segments, 4);
-  geometry.rotateX(-Math.PI * 0.5);
-
-  const pos = geometry.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < pos.count; i += 1) {
-    const x = pos.getX(i);
-    const z = pos.getZ(i);
-    const t = Math.min(1, Math.max(0, x / RIDGE_LENGTH + 0.5));
-    const ridge = sampleRidge(t);
-    const skirtDrop = z > 0 ? z * 0.28 : Math.abs(z) * 0.14;
-    pos.setY(i, ridge.y - skirtDrop);
-  }
-  pos.needsUpdate = true;
-
-  const material = new THREE.MeshBasicMaterial({ color: '#5b6e5d', fog: true });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.z = 0;
-
-  return {
-    mesh,
-    dispose() {
-      geometry.dispose();
-      material.dispose();
-    },
-  };
-}
-
-export function createPlatesController(diag: DiagRecorder, initialGuides: boolean): PlatesController {
+export function createPlatesController(
+  diag: DiagRecorder,
+  initialGuides: boolean,
+  windUniforms: WindUniforms,
+): PlatesController {
   const group = new THREE.Group();
   const guidesGroup = new THREE.Group();
   guidesGroup.visible = initialGuides;
   group.add(guidesGroup);
-
-  const ridge = createSlice1RidgeMesh();
-  group.add(ridge.mesh);
 
   const plateMeshes: Array<{
     key: PlateKey;
@@ -114,12 +98,12 @@ export function createPlatesController(diag: DiagRecorder, initialGuides: boolea
     dispose: () => void;
   }> = [];
 
-  const keys: PlateKey[] = ['ghostCastle', 'citadel', 'clouds', 'watchtower', 'foregroundLip'];
+  const keys: PlateKey[] = ['ghostCastle', 'citadel', 'watchtower', 'clouds', 'foregroundLip'];
   for (const key of keys) {
     const spec = ASSET_MANIFEST.plates[key];
     const geometry = new THREE.PlaneGeometry(spec.worldWidth, spec.worldHeight);
     const placeholder = createPlatePlaceholderTexture(key, spec);
-    const { material, setMap } = createFogMixMaterial(placeholder, spec.fogMix, key);
+    const { material, setMap } = createPlateMaterial(placeholder, spec.fogMix, key, windUniforms);
     const mesh = new THREE.Mesh(geometry, material);
 
     mesh.position.set(spec.offsetX, spec.offsetY, spec.z);
@@ -164,19 +148,21 @@ export function createPlatesController(diag: DiagRecorder, initialGuides: boolea
   }
 
   // HORIZON_Y world guideline and 4:3 safe-area framing box at z = 0
+  const frustumH0 = 2 * Math.tan((BASE_FOV * Math.PI) / 360) * BASE_CAMERA_Z;
+  const horizonWorldY = BASE_TARGET_Y - (0.5 - HORIZON_Y) * frustumH0;
   const horizonGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-48, 0, 0.05),
-    new THREE.Vector3(48, 0, 0.05),
+    new THREE.Vector3(-48, horizonWorldY, 0.05),
+    new THREE.Vector3(48, horizonWorldY, 0.05),
   ]);
   const horizonMat = new THREE.LineBasicMaterial({ color: '#e6c86e' });
   const horizonLine = new THREE.Line(horizonGeo, horizonMat);
   guidesGroup.add(horizonLine);
 
-  const safeHeight = SAFE_WIDTH / (4 / 3);
-  const safeGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(SAFE_WIDTH, safeHeight));
+  const safeWidth0 = frustumH0 * SAFE_ASPECT;
+  const safeGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(safeWidth0, frustumH0));
   const safeMat = new THREE.LineBasicMaterial({ color: '#6ec4e6' });
   const safeWire = new THREE.LineSegments(safeGeo, safeMat);
-  safeWire.position.set(0, HORIZON_Y + 0.55, 0.05);
+  safeWire.position.set(0, BASE_TARGET_Y, 0.05);
   guidesGroup.add(safeWire);
 
   return {
@@ -204,7 +190,6 @@ export function createPlatesController(diag: DiagRecorder, initialGuides: boolea
       safeWire.position.x = cameraX;
     },
     dispose() {
-      ridge.dispose();
       for (const item of plateMeshes) {
         item.dispose();
       }

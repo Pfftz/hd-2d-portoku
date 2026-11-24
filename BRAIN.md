@@ -1,14 +1,16 @@
 # BRAIN.md: Active Working Memory
 
-**Last Updated:** 2026-11-23
-**Current Phase:** Slice 1 Complete: Awaiting User Framing & ?debug=1 Inspection Before Slice 2
+**Last Updated:** 2026-11-24
+**Current Phase:** Slice 2 Complete: Ready for Slice 3 (Narrative UI, Landmarks & Audio)
 
 ## Today's Focus
 - [x] Initialize repository context files (`AGENTS.md`, `BRAIN.md`, `CHANGELOG.md`, `llms.txt`, `.agents/rules/mcp-routing.md`).
 - [x] Complete multi-lens Goldfish brainstorm and lock v1 architecture into `concepts_brief.md` and repo docs.
 - [x] Complete formal design document (`docs/designs/hd-2d-flower-hill-portfolio.md`) and sync context files.
 - [x] Finalize design document via `/egm-review` and implement Slice 1 (`Layout Contract, Framing & Movement Skeleton`).
-- [ ] Inspect live Slice 1 framing (`21:9`, `16:9`, `4:3`, `9:16`) and `?debug=1` alignment overlay before starting Slice 2.
+- [x] Calibrate Slice 1 camera pitch (`BASE_TARGET_Y = 2.85`, neutral pitch), hero scale (`3.0u`), knee-deep `foregroundLip` (`worldHeight: 8.0`), and backdrop plates (`citadel`, `ghostCastle`, `watchtower`, `clouds` at `z = -28, worldWidth = 96.0`), verified live across `4:3`, `16:9`, and `9:16` viewports.
+- [x] Implement Slice 2 (`Living Meadow & Unified Wind`: `wind.glsl.ts`, `sky.ts`, `foliage.ts` `InstancedMesh` lilies with MSAA `alphaToCoverage`, `petals.ts`, `FogExp2`, clouds UV drift, and `prefers-reduced-motion`).
+- [ ] Approve and implement Slice 3 (`Narrative UI, Landmarks & Audio`).
 
 ## Locked Decisions
 - **Stack:** Vanilla TypeScript + Three.js + Vite (`three` only; no React/R3F).
@@ -21,21 +23,23 @@
 - **Plates, Crop Anchors & Placeholders:** Single `layout.ts` world-metric contract and typed `manifest.ts` using alpha `.webp` primary plates (`.png` accepted for local testing) with `offsetX`, `offsetY`, `worldWidth`, and `worldHeight` crop/placement offsets for tightly cropped `citadel`, `ghostCastle`, and `watchtower` (master-canvas workflow in `public/assets/README.md` + `?debug=1` `horizonY` guideline and cropped-plate wireframe toggle), plus exact-ratio labeled placeholders until final owner art arrives.
 
 ## Asset Status
-- `public/assets/sprites/hero.png` (64px grid, 2px gutters, 4 to 6 idle + 6 to 8 walk frames) - Pending owner art (exact-ratio labeled placeholder active in Slice 1).
-- `public/assets/foliage/lily-leaves.png` - Pending owner art (placeholder in Slice 2).
-- `public/assets/foliage/lily-bells.png` - Pending owner art (placeholder in Slice 2).
-- `public/assets/backdrop/citadel.webp` (tight silhouette crop, `.png` local ok) - Pending owner art (exact-ratio placeholder active in Slice 1).
-- `public/assets/backdrop/ghost-castle.webp` (tight silhouette crop, `.png` local ok) - Pending owner art (exact-ratio placeholder active in Slice 1).
-- `public/assets/backdrop/watchtower.webp` (tight silhouette crop, `.png` local ok) - Pending owner art (exact-ratio placeholder active in Slice 1).
-- `public/assets/backdrop/clouds.webp` (`worldWidth: 104.0` >= `minPlateWidth(-42, 0.70) = 101.21`, horizontally tileable, `.png` local ok) - Pending owner art (exact-ratio placeholder active in Slice 1).
-- `public/assets/backdrop/foreground-lip.webp` (full width, pre-softened bottom lip, `.png` local ok) - Pending owner art (exact-ratio placeholder active in Slice 1).
+- `public/assets/sprites/hero.png` (`408x136`, `68px` stride with `2px` gutters, 4 wind-idle + 6 walk frames, `footPivotY: 4`, binary `{0, 255}` alpha) - Integrated & verified live.
+- `public/assets/foliage/lily-leaves.png` (`256x256`, `2x2` sage leaf clumps with RGB bleed and smooth alpha ramp) - Integrated & verified live under MSAA `alphaToCoverage`.
+- `public/assets/foliage/lily-bells.png` (`256x256`, `2x2` ivory lily-of-the-valley stems with RGB bleed and smooth alpha ramp) - Integrated & verified live under MSAA `alphaToCoverage`.
+- `public/assets/backdrop/citadel.webp` (`1236x1145`, tight crop synced to `manifest.ts` at `offsetX: -24.275, offsetY: 3.688, worldWidth: 30.9, worldHeight: 28.625`) - Integrated & verified live.
+- `public/assets/backdrop/ghost-castle.webp` (`528x577`, tight crop synced to `manifest.ts` at `offsetX: 12.0, offsetY: 5.263, worldWidth: 13.2, worldHeight: 14.425`) - Integrated & verified live.
+- `public/assets/backdrop/watchtower.webp` (`523x878`, tight crop synced to `manifest.ts` at `offsetX: 19.587, offsetY: 6.775, worldWidth: 13.075, worldHeight: 21.95`) - Integrated & verified live.
+- `public/assets/backdrop/clouds.webp` (`2048x384`, horizontally seamless `tileX: true` with `1.085` RGBA edge delta) - Integrated & verified live.
+- `public/assets/backdrop/foreground-lip.webp` (`2560x320`, composited from high-res lily leaves/bells with bottom bokeh blur, `589.1 KB` total WebP payload across all 5 plates) - Integrated & verified live.
+- `public/assets/landmarks/{about,works,interests,contact}.png` (`128x128` bottom-centered RGBA cutouts with moss palette harmonization and RGB edge bleed) - Generated & verified (loaded in Slice 3).
+- `scripts/process-assets.py` - Reusable asset post-processing, QA assertion, and `manifest.ts` crop-sync pipeline.
 - `public/assets/audio/theme.mp3` (primary `.mp3`/`.m4a`, optional `.ogg`) - Pending owner licensed track (Slice 3).
 
 ## Planned Vertical Slices
-1. [x] **Slice 1 (Layout Contract, Framing & Movement Skeleton):** Vite + TS + Three.js (`^0.170.0`) + ESLint + Vitest scaffold, `layout.ts` world-metric contract, `manifest.ts` (WebP primary + silhouette crop offsets, `clouds.worldWidth = 104.0`), `public/assets/README.md` master-canvas conversion guide, exact-ratio labeled placeholders, Hor+ widescreen and moderate portrait `100dvh` camera, deadzone spring follow + idle mouse parallax, unified keyboard + click/tap-to-walk with refocus/drag/wake guards, `?debug=1` `horizonY`/wireframe toggle, CSS vignette, WebGL-failure HTML Archive fallback, and 19 passing unit tests.
-2. [ ] **Slice 2 (Living Meadow & Unified Wind):** Overcast sky dome shader, tuned `FogExp2` (light/no fog on pre-graded plates), shared `wind.glsl` (`windSway` + `windDrift`), `MeshBasicMaterial` + `onBeforeCompile` (`alphaTest: 0.3` + `customProgramCacheKey()`) lily `InstancedMesh` cards with native MSAA `alphaToCoverage`, 150-to-250-quad `InstancedMesh` tumbling petals, tileable `clouds.webp` drift, `prefers-reduced-motion` policy.
+1. [x] **Slice 1 (Layout Contract, Framing & Movement Skeleton):** Vite + TS + Three.js (`^0.170.0`) + ESLint + Vitest scaffold, `layout.ts` world-metric contract (`BASE_TARGET_Y = 2.85`, `HERO_WORLD_WIDTH/HEIGHT = 3.0`), `manifest.ts` (WebP primary + silhouette crop offsets matching reference `4:3` composition, `clouds` at `z = -28, worldWidth = 96.0`), `public/assets/README.md` master-canvas conversion guide, exact-ratio labeled placeholders, neutral-pitch Hor+ widescreen and moderate portrait `100dvh` camera, deadzone spring follow + idle mouse parallax, unified keyboard + click/tap-to-walk with refocus/drag/wake guards, `?debug=1` `horizonY`/wireframe toggle, CSS vignette, WebGL-failure HTML Archive fallback, 20 passing unit tests, and live `4:3`/`16:9`/`9:16` visual inspection.
+2. [x] **Slice 2 (Living Meadow & Unified Wind):** Overcast sky dome shader, tuned `FogExp2` (`#d2d6dc`, `0.011`, light `uFogMix` on architectural plates and `fog: false` on hero/clouds/lip), shared `wind.glsl.ts` (`windSway` + monotonic `advanceDriftOffset`), `MeshBasicMaterial` + `onBeforeCompile` (`alphaTest: 0.3` + `customProgramCacheKey()`) `1800` leaf + `900` bell lily `InstancedMesh` cards with native MSAA `alphaToCoverage` (`?noMsaa=1` -> `alphaTest: 0.5`), `200`-quad `InstancedMesh` tumbling petals (`DataTexture` without dark fringe), tileable `clouds.webp` UV drift, `prefers-reduced-motion` freeze, 21 passing unit tests, and 60 FPS visual checks across `4:3`, `16:9`, and `9:16`.
 3. [ ] **Slice 3 (Narrative UI, Landmarks & Audio):** Validated `src/content/nodes.json`, 4 landmarks with additive soft-glow planes + proximity `[E]`/tap cue, centralized state machine (`src/state/`), skippable JRPG dialogue box + vertical `WORKS_PICKER` + plain `[Inspect]` works card, semantic HTML `Index/Archive` drawer + sound/mute toggle (`UNSTARTED`/`PLAYING`/`MUTED`), Web Audio `AudioBufferSourceNode` BGM 2s fade-in + pre-baked 4s pink-noise wind bed.
 4. [ ] **Slice 4 (Owner Art Integration & Polish):** Drop in owner sprite, lily atlases, 5 painted/cropped WebP plates, final `nodes.json` copy, and licensed BGM loop; verify 60 FPS on integrated GPU and mobile viewports.
 
 ## Next Step
-- Inspect the live Slice 1 framing (`npm run dev`, `?debug=1` with `[G]` wireframes, `?noMsaa=1`, `?loseContext=1`, across `21:9`, `16:9`, `4:3`, and `9:16`) before approving Slice 2.
+- Inspect the live Slice 2 living meadow and proceed to Slice 3 (`landmarks.ts`, `dialogueBox.ts`, `worksPicker.ts`, `inspectCard.ts`, and `audioEngine.ts`).

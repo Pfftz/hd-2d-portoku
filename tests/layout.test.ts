@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ASSET_MANIFEST } from '../src/assets/manifest.ts';
 import { stepCameraDamper } from '../src/scene/camera.ts';
+import { createMulberry32, sampleHillY } from '../src/scene/foliage.ts';
 import {
+  BASE_FOV,
+  HERO_WORLD_HEIGHT,
   INTERACT_RADIUS,
   LANDMARK_T,
   RIDGE_LENGTH,
@@ -12,6 +15,7 @@ import {
   minPlateWidth,
   sampleRidge,
 } from '../src/scene/layout.ts';
+import { advanceDriftOffset } from '../src/scene/shaders/wind.glsl.ts';
 
 describe('layout spatial math', () => {
   it('keeps sampleRidge within RIDGE_LENGTH and |z| <= 0.4', () => {
@@ -50,9 +54,57 @@ describe('layout spatial math', () => {
   });
 
   it('computes minPlateWidth >= 21:9 frustum width plus pan', () => {
-    const w = minPlateWidth(-42, 0.7);
-    expect(w).toBeGreaterThan(frustumWidthAtZ(-42, 21 / 9));
-    expect(ASSET_MANIFEST.plates.clouds.worldWidth).toBeGreaterThanOrEqual(w);
+    const cloudsSpec = ASSET_MANIFEST.plates.clouds;
+    const minCloudsW = minPlateWidth(cloudsSpec.z, cloudsSpec.parallax);
+    expect(minCloudsW).toBeGreaterThan(frustumWidthAtZ(cloudsSpec.z, 21 / 9));
+    expect(cloudsSpec.worldWidth).toBeGreaterThanOrEqual(minCloudsW);
+
+    const lipSpec = ASSET_MANIFEST.plates.foregroundLip;
+    const minLipW = minPlateWidth(lipSpec.z, lipSpec.parallax);
+    expect(lipSpec.worldWidth).toBeGreaterThanOrEqual(minLipW);
+  });
+
+  it('matches 4:3 and 9:16 reference composition proportions and occlusion invariants', () => {
+    const tanHalf = Math.tan((BASE_FOV * Math.PI) / 360);
+    const projectScreen = (aspect: number, z: number, worldY: number, worldX = 0) => {
+      const framing = computeCameraFraming(aspect);
+      const dist = framing.cameraZ - z;
+      const halfH = tanHalf * dist;
+      const halfW = halfH * aspect;
+      return {
+        yFromBottomPct: ((worldY - (framing.targetOffsetY - halfH)) / (2 * halfH)) * 100,
+        xFromLeftPct: ((worldX - -halfW) / (2 * halfW)) * 100,
+      };
+    };
+
+    const footY = sampleRidge(0.5).y;
+    const footFrac = ASSET_MANIFEST.sprite.footPivotY / ASSET_MANIFEST.sprite.frameH;
+    const quadBottomY = footY - HERO_WORLD_HEIGHT * footFrac;
+    const quadTopY = quadBottomY + HERO_WORLD_HEIGHT;
+
+    const heroFeet43 = projectScreen(4 / 3, 0, footY);
+    const heroTop43 = projectScreen(4 / 3, 0, quadTopY);
+    expect(heroFeet43.yFromBottomPct).toBeGreaterThanOrEqual(25);
+    expect(heroFeet43.yFromBottomPct).toBeLessThanOrEqual(33);
+    expect(heroTop43.yFromBottomPct).toBeGreaterThanOrEqual(48);
+    expect(heroTop43.yFromBottomPct).toBeLessThanOrEqual(55);
+
+    const { foregroundLip, citadel, ghostCastle, watchtower, clouds } = ASSET_MANIFEST.plates;
+    const lipTop43 = projectScreen(4 / 3, foregroundLip.z, foregroundLip.offsetY + foregroundLip.worldHeight * 0.5);
+    const lipBottom43 = projectScreen(4 / 3, foregroundLip.z, foregroundLip.offsetY - foregroundLip.worldHeight * 0.5);
+    const lipBottom916 = projectScreen(9 / 16, foregroundLip.z, foregroundLip.offsetY - foregroundLip.worldHeight * 0.5);
+    expect(lipTop43.yFromBottomPct).toBeGreaterThanOrEqual(32);
+    expect(lipTop43.yFromBottomPct).toBeLessThanOrEqual(38);
+    expect(lipBottom43.yFromBottomPct).toBeLessThanOrEqual(0);
+    expect(lipBottom916.yFromBottomPct).toBeLessThanOrEqual(0);
+
+    const citadelLeft43 = projectScreen(4 / 3, citadel.z, citadel.offsetY, citadel.offsetX - citadel.worldWidth * 0.5);
+    expect(citadelLeft43.xFromLeftPct).toBeLessThanOrEqual(0);
+    expect(ghostCastle.offsetX).toBeGreaterThan(0);
+
+    const towerTop43 = projectScreen(4 / 3, watchtower.z, watchtower.offsetY + watchtower.worldHeight * 0.5);
+    expect(towerTop43.yFromBottomPct).toBeGreaterThanOrEqual(85);
+    expect(watchtower.z).toBeLessThan(clouds.z);
   });
 
   it('computes responsive camera framing across 21:9, 4:3, 1:1, and 9:16', () => {
@@ -104,5 +156,24 @@ describe('layout spatial math', () => {
       expect(landmark.worldHeight).toBeGreaterThan(0);
       expect(landmark.hitRadius).toBeGreaterThan(0);
     }
+  });
+
+  it('keeps wind drift strictly monotonic and deterministic under reducedMotion', () => {
+    let offset = 0;
+    for (let i = 0; i < 400; i += 1) {
+      const next = advanceDriftOffset(offset, 1 / 60, 1, i * (1 / 60));
+      expect(next).toBeGreaterThan(offset);
+      offset = next;
+    }
+    expect(advanceDriftOffset(offset, 1 / 60, 0, 12)).toBe(offset);
+    expect(advanceDriftOffset(offset, 0, 1, 12)).toBe(offset);
+
+    const a = createMulberry32(0x56504844);
+    const b = createMulberry32(0x56504844);
+    expect([a(), a(), a()]).toEqual([b(), b(), b()]);
+
+    expect(sampleHillY(0, 0)).toBeCloseTo(sampleRidge(0.5).y);
+    expect(sampleHillY(0, 4)).toBeLessThan(sampleHillY(0, 1));
+    expect(sampleHillY(0, -3)).toBeLessThan(sampleHillY(0, 0));
   });
 });

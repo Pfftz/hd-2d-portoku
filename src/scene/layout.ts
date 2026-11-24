@@ -11,10 +11,11 @@ export const CAMERA_NEAR = 0.5;
 export const CAMERA_FAR = 200;
 export const DEADZONE_HALF_WIDTH = 1.6;
 export const MAX_CAMERA_PAN = 16;
+export const BASE_TARGET_Y = 2.85;
 export const HORIZON_Y = 0.35;
 export const PORTRAIT_VERTICAL_OVERDRAW = 1.65;
-export const HERO_WORLD_WIDTH = 2.2;
-export const HERO_WORLD_HEIGHT = 2.2;
+export const HERO_WORLD_WIDTH = 3.0;
+export const HERO_WORLD_HEIGHT = 3.0;
 
 export const MASTER_CANVAS_WIDTH = 3840;
 export const MASTER_CANVAS_HEIGHT = 1600;
@@ -105,7 +106,7 @@ export function computeCameraFraming(aspect: number): CameraFraming {
     return {
       cameraZ: BASE_CAMERA_Z,
       fov: BASE_FOV,
-      targetOffsetY: 0.9,
+      targetOffsetY: BASE_TARGET_Y,
       pullback: 1.0,
       isPortrait: false,
     };
@@ -116,7 +117,7 @@ export function computeCameraFraming(aspect: number): CameraFraming {
     return {
       cameraZ: BASE_CAMERA_Z * pullback,
       fov: BASE_FOV,
-      targetOffsetY: 0.9,
+      targetOffsetY: BASE_TARGET_Y,
       pullback,
       isPortrait: false,
     };
@@ -125,7 +126,7 @@ export function computeCameraFraming(aspect: number): CameraFraming {
   return {
     cameraZ: BASE_CAMERA_Z * pullback,
     fov: BASE_FOV,
-    targetOffsetY: 0.9 - (pullback - 1.0) * 1.4,
+    targetOffsetY: BASE_TARGET_Y - (pullback - 1.0) * 1.4,
     pullback,
     isPortrait: true,
   };

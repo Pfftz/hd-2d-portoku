@@ -11,10 +11,10 @@
 ## History
 - [CHANGELOG.md](CHANGELOG.md): Keep a Changelog milestone log under `[Unreleased]` and Semantic Versioning.
 
-## Implemented Layout (Slice 1)
+## Implemented Layout (Slice 1-2)
 - [package.json](package.json), [tsconfig.json](tsconfig.json), [vite.config.ts](vite.config.ts), [eslint.config.js](eslint.config.js), [index.html](index.html): Vite + TypeScript + Three.js (`^0.170.0`) + Vitest + ESLint scaffold and DOM mount targets.
 - [src/main.ts](src/main.ts): Bootstrap entry wiring validated `nodes.json`, `appState`, `archiveDrawer`, `hudControls`, WebGL init/context-loss fallback, `sceneController`, and `inputRouter`.
-- `src/scene/`: [layout.ts](src/scene/layout.ts) world-metric/crop contract, [placeholders.ts](src/scene/placeholders.ts) exact-ratio calibration textures + `.webp`/`.png` loader, [renderer.ts](src/scene/renderer.ts) native-MSAA/diagnostic controller, [camera.ts](src/scene/camera.ts) deadzone spring rig + mouse-look parallax, [hero.ts](src/scene/hero.ts) `NearestFilter` mirrored sprite controller, [plates.ts](src/scene/plates.ts) 5 parallax plates + Slice 1 ridge + `?debug=1` alignment overlay, and [sceneController.ts](src/scene/sceneController.ts) render/movement loop.
+- `src/scene/`: [layout.ts](src/scene/layout.ts) world-metric/crop contract, [shaders/wind.glsl.ts](src/scene/shaders/wind.glsl.ts) (`windSway` + monotonic `advanceDriftOffset`), [sky.ts](src/scene/sky.ts) overcast pearl-ivory-beige sky dome, [foliage.ts](src/scene/foliage.ts) hillside terrain + MSAA `alphaToCoverage` `InstancedMesh` lily meadow, [petals.ts](src/scene/petals.ts) `200`-quad tumbling petals, [placeholders.ts](src/scene/placeholders.ts) exact-ratio calibration textures + `.webp`/`.png` loader, [renderer.ts](src/scene/renderer.ts) native-MSAA/diagnostic controller, [camera.ts](src/scene/camera.ts) deadzone spring rig + mouse-look parallax, [hero.ts](src/scene/hero.ts) `NearestFilter` mirrored sprite controller, [plates.ts](src/scene/plates.ts) 5 parallax plates + cloud UV drift + `?debug=1` alignment overlay, and [sceneController.ts](src/scene/sceneController.ts) render/FogExp2/movement loop.
 - [src/assets/manifest.ts](src/assets/manifest.ts): Typed asset dimensions, WebP primary plate crop/placement specs (`offsetX`, `offsetY`, `worldWidth`, `worldHeight`), 64px sprite pivot/2px gutters, and audio paths.
 - `src/content/`: [nodes.json](src/content/nodes.json) (`[PLACEHOLDER]` v1 schema copy) and [validateNodes.ts](src/content/validateNodes.ts) load-time schema and protocol guard.
 - [src/state/appState.ts](src/state/appState.ts): Centralized mode and audio state machine (`TITLE_IDLE`, `EXPLORING`, `DIALOGUE`, `WORKS_PICKER`, `INSPECT_CARD`, `ARCHIVE_DRAWER`, `FALLBACK_ARCHIVE`).
@@ -23,8 +23,8 @@
 - `tests/`: Unit suites at [layout.test.ts](tests/layout.test.ts), [appState.test.ts](tests/appState.test.ts), and [validateNodes.test.ts](tests/validateNodes.test.ts).
 - [public/assets/README.md](public/assets/README.md): Master-canvas workflow and pixel-to-manifest crop conversion formulas for owner art drop-in.
 
-## Planned Layout (Slice 2-4)
-- `src/scene/`: `shaders/wind.glsl.ts` (`windSway` + `windDrift`), `sky.ts`, `foliage.ts` (`InstancedMesh` lilies), `petals.ts` (`InstancedMesh` quads), and `landmarks.ts` (Slice 2-3).
+## Planned Layout (Slice 3-4)
+- `src/scene/landmarks.ts`: 4 interactive hilltop landmarks with soft additive glow planes and world-to-screen projection (Slice 3).
 - `src/ui/` & `src/audio/`: `dialogueBox.ts`, `worksPicker.ts`, `inspectCard.ts`, and `audioEngine.ts` (Slice 3).
 - `public/assets/sprites/hero.png`: Hot-swappable 64px `NearestFilter` alpha-cutout hero spritesheet (`DoubleSide` mirroring).
 - `public/assets/foliage/lily-leaves.png`: Native-res alpha-cutout lily-of-the-valley leaf atlas.
@@ -38,4 +38,4 @@
 
 ## Optional
 - [.agents/rules/antigravity-rtk-rules.md](.agents/rules/antigravity-rtk-rules.md): RTK token-saving CLI rules installed by `rtk init --agent antigravity`.
-- `graphify-out/`: Agent-only codebase comprehension graph (git-ignored; first build after Slice 1).
+- `graphify-out/`: Agent-only codebase comprehension graph (git-ignored; updated after each slice).
