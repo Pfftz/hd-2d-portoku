@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Flower Hill Portfolio</title>
+  </head>
+  <body>
+    <div id="app-root">
+      <canvas id="scene-canvas" aria-label="Interactive 2.5D hillside portfolio"></canvas>
+      <div id="vignette-overlay" aria-hidden="true"></div>
+      <div id="hud-root"></div>
+      <div id="dialogue-root"></div>
+      <dialog id="archive-dialog" aria-labelledby="archive-title"></dialog>
+      <div id="debug-overlay" hidden></div>
+    </div>
+    <noscript>
+      <main style="padding: 2rem; font-family: system-ui, sans-serif; color: #f2efe4; background: #141820;">
+        <h1>Flower Hill Portfolio</h1>
+        <p>JavaScript is disabled. Enable JavaScript to view the interactive scene and portfolio archive.</p>
+      </main>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -14,8 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added MCP tool routing profile (`.agents/rules/mcp-routing.md`) and `llms.txt` navigation map.
 - Initialized rtk for Antigravity; ignored `graphify-out/`.
 - Finalized formal design document (`docs/designs/hd-2d-flower-hill-portfolio.md`) covering CUJs, architecture, alternatives, NFRs, and the 35-file Slice 1 to 4 implementation and verification plan.
+- Implemented Slice 1 (`Layout Contract, Framing & Movement Skeleton`): Vite + TypeScript + Three.js (`^0.170.0`) + ESLint + Vitest scaffold, `src/scene/layout.ts` spatial/crop contract, `src/assets/manifest.ts`, `src/content/nodes.json` + `validateNodes.ts`, `src/state/appState.ts`, `src/input/inputRouter.ts`, `src/scene/{placeholders,renderer,camera,hero,plates,sceneController}.ts`, `src/ui/{styles.css,hudControls.ts,archiveDrawer.ts}`, `src/main.ts`, `public/assets/README.md`, and 19 unit tests across `tests/{layout,appState,validateNodes}.test.ts`.
 
 ### Changed
+- Applied the `/egm-review` Consolidated Proposed Replacement to `docs/designs/hd-2d-flower-hill-portfolio.md` and marked its status `Finalized`.
+- Widened `clouds` plate `worldWidth` from `96.0` to `104.0` in `src/assets/manifest.ts`, `public/assets/README.md`, and the design spec so the plate exceeds `minPlateWidth(-42, 0.70) = 101.21` across 21:9 + max camera pan.
 - Finalized v1 architecture from multi-lens Goldfish brainstorm: dropped `EffectComposer`, runtime bloom, and runtime tilt-shift in favor of native MSAA driving `alphaToCoverage` on `InstancedMesh` lilies, additive landmark glow planes, CSS vignette, and pre-softened foreground-lip/sky plates.
 - Replaced `THREE.Points` petals with a 150-to-250-quad `InstancedMesh` batch and split `wind.glsl` into oscillating `windSway` and monotonic negative-X `windDrift` (requiring horizontally tileable `clouds.webp` and `fog: false` or light `uFogMix` on pre-graded plates).
 - Updated portrait mobile framing (`100dvh` with moderate pullback to preserve 64px sprite legibility, revealing citadel and watchtower via ridge walking).

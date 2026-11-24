@@ -1,7 +1,7 @@
 # HD-2D Flower Hill Portfolio
 
 *   **Author:** Pfftz
-*   **Status:** Proposed
+*   **Status:** Finalized
 *   **Date:** 2026-11-21
 
 --------------------------------------------------------------------------------
@@ -320,192 +320,221 @@ interface NodesDocument {
 
 ## Detailed Implementation Plan
 
+### Slice Checkpoints
+
+Work proceeds strictly one vertical slice at a time. Each slice leaves the repository compilable (`npm run build`), lint-clean (`npm run lint`), and green on unit tests (`npm test`), plus a `graphify-out/` refresh at slice completion per `.agents/rules/mcp-routing.md`:
+
+*   **Slice 1 (Layout Contract, Framing & Movement Skeleton):** Creates items `1` to `14`, `19` (`[PLACEHOLDER]` `nodes.json`), `20`, `22` (core Slice 1 composition), `23` (core viewport, vignette, corner controls, whisper prompt, archive CSS), `24` (Archive button + whisper prompt), `28`, `30` (Slice 1 bootstrap), `31`, `32` (Slice 1 state/guard tests), `33`, and `34`. Produces a runnable, camera-framed ridge walk with exact-ratio placeholder hero and 5 plates, `?debug=1` alignment overlay, and working `FALLBACK_ARCHIVE` without importing Slice 2 or Slice 3 scene modules.
+*   **Slice 2 (Living Meadow & Unified Wind):** Creates items `15` to `18` and expands items `8`, `9` (`prefers-reduced-motion` scene consumers), `14` (cloud UV drift), `22` (sky, foliage, petals, `scene.fog`), and `30` (Slice 2 wind/meadow tick).
+*   **Slice 3 (Narrative UI, Landmarks & Audio):** Creates items `21`, `25`, `26`, `27`, `29` and expands items `8` (landmark placeholder cutouts), `9` (dialogue/picker/inspect/audio states), `10` (landmark hit-test, `[E]`/`Space`/`Esc` bindings), `22` (landmark projection and arrival trigger), `23` (dialogue/picker/inspect styles), `24` (`[E]`/tap badge and Sound/Mute button), `30` (wires `dialogueBox`, `worksPicker`, `inspectCard`, `audioEngine`), and `32` (Slice 3 state tests).
+*   **Slice 4 (Owner Art Integration & Polish):** Replaces `[PLACEHOLDER]` copy in item `19` and drops final owner assets into item `36` (`public/assets/*`), running the full verification plan across desktop and mobile.
+
 ### Target Files to Create/Modify
 
 #### 1. `package.json` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Build configuration.
-*   **Proposed Changes**: Declares `three` as the sole runtime dependency and `vite`, `typescript`, `@types/three`, `eslint`, `@eslint/js`, `typescript-eslint`, and `vitest` as devDependencies, with `dev`, `build`, `lint`, and `test` scripts. Enforces the minimal-dependency architecture without React or `EffectComposer`.
+*   **Type / Scope**: Build and package manifest.
+*   **Proposed Changes**: Sets `"type": "module"`, declares `"three": "^0.170.0"` as the sole runtime dependency, and adds `"vite": "^6.0.0"`, `"typescript": "^5.7.0"`, `"@types/three": "^0.170.0"`, `"eslint": "^9.15.0"`, `"@eslint/js": "^9.15.0"`, `"typescript-eslint": "^8.15.0"`, and `"vitest": "^2.1.0"` in `devDependencies`. Defines scripts `"dev": "vite"`, `"build": "tsc --noEmit && vite build"`, `"preview": "vite preview"`, `"lint": "eslint ."`, and `"test": "vitest run"`. Excludes React, R3F, and external post-processing packages.
 
 #### 2. `tsconfig.json` (`Create`, `[Slice 1]`)
 
 *   **Type / Scope**: TypeScript compiler configuration.
-*   **Proposed Changes**: Enables `strict: true`, `noUncheckedIndexedAccess: true`, `moduleResolution: "bundler"`, and `target: "ES2022"` so schema boundaries and scene math stay type-safe across slices.
+*   **Proposed Changes**: Sets `"target": "ES2022"`, `"module": "ESNext"`, `"moduleResolution": "bundler"`, `"lib": ["ES2022", "DOM", "DOM.Iterable"]`, `"types": ["vite/client"]`, `"strict": true`, `"noUncheckedIndexedAccess": true`, `"resolveJsonModule": true`, `"isolatedModules": true`, `"noEmit": true`, and `"include": ["src", "tests", "vite.config.ts", "eslint.config.js"]`.
 
 #### 3. `vite.config.ts` (`Create`, `[Slice 1]`)
 
 *   **Type / Scope**: Bundler and test runner configuration.
-*   **Proposed Changes**: Configures `base: './'` for static hosting portability and sets `test: { environment: 'node' }` for Vitest unit tests on pure logic modules.
+*   **Proposed Changes**: Imports `defineConfig` from `'vitest/config'`, sets `base: './'` for static subpath hosting portability, and configures `test: { environment: 'node', include: ['tests/**/*.test.ts'] }`.
 
 #### 4. `eslint.config.js` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Static analysis and lint rules.
-*   **Proposed Changes**: Configures flat TypeScript ESLint rules for type discipline, import hygiene, and unused-variable checks so the `ESLint` MCP runs from Slice 1 onward.
+*   **Type / Scope**: Flat ESLint configuration.
+*   **Proposed Changes**: Uses `@eslint/js` and `typescript-eslint` recommended type-checked rules (`@typescript-eslint/no-unused-vars`, `@typescript-eslint/no-explicit-any`, `no-console: ['warn', { allow: ['warn', 'error'] }]`) with inline `languageOptions.globals` for ES2022/browser APIs (plus Node globals in `tests/**` and config files, avoiding unlisted packages) so both `npm run lint` and the `ESLint` MCP check all JS/TS files from Slice 1 onward.
 
 #### 5. `index.html` (`Create`, `[Slice 1]`)
 
 *   **Type / Scope**: Root HTML document.
-*   **Proposed Changes**: Hosts the full-viewport (`100vw x 100dvh`) `<canvas id="scene-canvas">`, CSS vignette layer, semantic DOM containers for JRPG UI overlays and the `Index/Archive` `<dialog>`, plus a `<noscript>` fallback notice.
+*   **Proposed Changes**: Includes `<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">`, `<div id="app-root">` hosting `<canvas id="scene-canvas">`, `<div id="vignette-overlay" aria-hidden="true">`, `<div id="hud-root">`, `<div id="dialogue-root">`, `<dialog id="archive-dialog">`, `<div id="debug-overlay" hidden>`, and a static `<noscript>` notice explaining that JavaScript is required for interactive mode.
 
 #### 6. `src/scene/layout.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Spatial world-metric contract module.
-*   **Proposed Changes**: Exports `SAFE_ASPECT = 4 / 3`, `SAFE_WIDTH = 16`, `RIDGE_LENGTH = 48`, `walkSpeed = 4.8`, `interactRadius = 2.0`, `baseFov = 38`, `LANDMARK_T` (`about: 0.43` outside spawn `0.50` range, plus `works`, `interests`, `contact`), `sampleRidge(t)`, `computeEndpointDamping(t)` (outer 5% soft deceleration), `minPlateWidth(z, parallax)`, and `computeCameraFraming(aspect)` (Hor+ desktop and clamped `1.0..1.45` portrait pullback + dialogue vertical offset). Ensures owner art, camera, and spline code share one metric source.
+*   **Type / Scope**: Spatial world-metric contract and crop-math module.
+*   **Proposed Changes**: Exports uniform `UPPER_SNAKE_CASE` constants: `SAFE_ASPECT = 4 / 3`, `SAFE_WIDTH = 16`, `RIDGE_LENGTH = 48`, `WALK_SPEED = 4.8`, `INTERACT_RADIUS = 2.0`, `BASE_FOV = 38`, `BASE_CAMERA_Z = 18`, `CAMERA_NEAR = 0.5`, `CAMERA_FAR = 200`, `DEADZONE_HALF_WIDTH = 1.6`, `MAX_CAMERA_PAN = 16`, `HORIZON_Y = 0.35`, `PORTRAIT_VERTICAL_OVERDRAW = 1.65`, `HERO_WORLD_WIDTH = 2.2`, `HERO_WORLD_HEIGHT = 2.2`, `MASTER_CANVAS_WIDTH = 3840`, `MASTER_CANVAS_HEIGHT = 1600`, `MASTER_PX_PER_UNIT = 40`, `MASTER_HORIZON_PX_Y = 1040`, and `LANDMARK_T = { interests: 0.14, about: 0.43, works: 0.68, contact: 0.86 }` (spacing `about` `3.36` units left of spawn `0.50`, outside `INTERACT_RADIUS = 2.0`, with minimum neighbor gap `8.64` units). Exports pure functions:
+    *   `sampleRidge(t)`: Clamps `t` to `[0, 1]` and returns `{ x: (t - 0.5) * RIDGE_LENGTH, y: 0.35 * (t - 0.5) + 0.25 * Math.sin(Math.PI * t), z: -0.3 * Math.sin(Math.PI * (t - 0.5)) }` (`|z| <= 0.3`).
+    *   `computeEndpointDamping(t, dir)`: Takes normalized position `t` and walk direction `dir` (`-1 | 0 | 1`). Returns `1.0` when `dir === 0` or moving inward (`(t < 0.05 && dir > 0)` or `(t > 0.95 && dir < 0)`). When moving outward inside `t < 0.05` (`u = clamp(t / 0.05, 0, 1)`) or `t > 0.95` (`u = clamp((1 - t) / 0.05, 0, 1)`), returns cubic `u * u * (3 - 2 * u)` so boundary braking never prevents walking back inward.
+    *   `frustumWidthAtZ(z, aspect)`: Computes `2 * Math.tan((BASE_FOV * Math.PI) / 360) * (BASE_CAMERA_Z - z) * aspect`.
+    *   `minPlateWidth(z, parallax)`: Computes `frustumWidthAtZ(z, 21 / 9) + MAX_CAMERA_PAN * (1 - parallax)`.
+    *   `computeCameraFraming(aspect)`: For `aspect >= SAFE_ASPECT`: returns `{ cameraZ: BASE_CAMERA_Z, fov: BASE_FOV, targetOffsetY: 0.9, pullback: 1.0, isPortrait: false }`. For `1.0 <= aspect < SAFE_ASPECT`: interpolates `pullback` linearly in `1.0..1.15` with `cameraZ = BASE_CAMERA_Z * pullback`, `targetOffsetY = 0.9`, `isPortrait: false`. For `aspect < 1.0`: computes `pullback = clamp(1.15 + ((1.0 - aspect) / 0.44) * 0.3, 1.15, 1.45)`, `cameraZ = BASE_CAMERA_Z * pullback`, `targetOffsetY = 0.9 - (pullback - 1.0) * 1.4` (portrait camera-target Y offset raising the ridge above the `168px` dialogue reserve), `isPortrait: true`.
+    *   `cropPixelsToManifest(cropX, cropY, cropW, cropH)`: Pure conversion mapping trimmed master-canvas pixel bounds to `{ offsetX: (cropX + cropW * 0.5 - 1920) / 40, offsetY: (1040 - (cropY + cropH * 0.5)) / 40, worldWidth: cropW / 40, worldHeight: cropH / 40 }`.
 
 #### 7. `src/assets/manifest.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Typed asset manifest.
-*   **Proposed Changes**: Defines hero 64x64 sprite metadata (`gutterPx: 2`, idle/walk frame counts, `footPivotY`), lily leaf/bell atlas grids, the 5 parallax plates (`citadel`, `ghostCastle`, `watchtower` tightly cropped via `offsetX`, `offsetY`, `worldWidth`, `worldHeight`; full-width `clouds` with `tileX: true`; full-width pre-softened `foregroundLip`) using `.webp` primary (allowing `.png` locally), and audio paths (`.mp3`/`.m4a` primary, optional `.ogg`).
+*   **Type / Scope**: Typed asset manifest and URL resolver.
+*   **Proposed Changes**: Resolves asset paths relative to `import.meta.env.BASE_URL` (supporting `base: './'`) and exports concrete defaults:
+    *   `sprite`: `path: 'assets/sprites/hero.png'`, `frameW: 64`, `frameH: 64`, `gutterPx: 2` (`68px` cell stride with `2px` outer/inner transparent padding around each `64x64` frame), `idleFrames: 4` (row 0 at `6 FPS`), `walkFrames: 6` (row 1 at `10 FPS`), `footPivotY: 4`, `worldWidth: HERO_WORLD_WIDTH`, `worldHeight: HERO_WORLD_HEIGHT`.
+    *   `foliage`: `leavesPath: 'assets/foliage/lily-leaves.png'`, `bellsPath: 'assets/foliage/lily-bells.png'`, `cols: 2`, `rows: 2`, `cellPx: 128`, `leafCells: 4`, `bellCells: 4`.
+    *   `plates`: Five entries using `.webp` paths by default (`TextureLoader` probes `.png` override on `.webp` load failure for local testing): `citadel` (`backdrop/citadel.webp`, `z: -55`, `parallax: 0.78`, `horizonY: HORIZON_Y`, `fogMix: 0.18`, `tileX: false`, `offsetX: -14.0`, `offsetY: 4.5`, `worldWidth: 20.0`, `worldHeight: 15.0`), `ghostCastle` (`backdrop/ghost-castle.webp`, `z: -60`, `parallax: 0.85`, `horizonY: HORIZON_Y`, `fogMix: 0.25`, `tileX: false`, `offsetX: 0.0`, `offsetY: 5.5`, `worldWidth: 16.0`, `worldHeight: 14.0`), `watchtower` (`backdrop/watchtower.webp`, `z: -32`, `parallax: 0.55`, `horizonY: HORIZON_Y`, `fogMix: 0.12`, `tileX: false`, `offsetX: 15.5`, `offsetY: 3.5`, `worldWidth: 14.0`, `worldHeight: 14.0`), `clouds` (`backdrop/clouds.webp`, `z: -42`, `parallax: 0.70`, `horizonY: HORIZON_Y`, `fogMix: 0.0`, `tileX: true`, `offsetX: 0.0`, `offsetY: 4.0`, `worldWidth: 104.0`, `worldHeight: 28.0`), and `foregroundLip` (`backdrop/foreground-lip.webp`, `z: 1.8`, `parallax: 0.0`, `horizonY: HORIZON_Y`, `fogMix: 0.0`, `tileX: false`, `offsetX: 0.0`, `offsetY: -3.1`, `worldWidth: 64.0`, `worldHeight: 5.0`).
+    *   `landmarks`: Record keyed by `'about' | 'works' | 'interests' | 'contact'` with `{ path: 'assets/landmarks/<key>.png', worldWidth: 1.8, worldHeight: 1.8, zOffset: -0.15, hitRadius: 1.4, glowSize: 2.4 }`.
+    *   `audio`: `{ primary: 'assets/audio/theme.mp3', fallbackOgg: 'assets/audio/theme.ogg' }`.
 
-#### 8. `src/scene/placeholders.ts` (`Create`, `[Slice 1]`)
+#### 8. `src/scene/placeholders.ts` (`Create`, `[Slice 1]`, expanded `[Slice 2-3]`)
 
-*   **Type / Scope**: Procedural calibration texture generator.
-*   **Proposed Changes**: Reads `layout.ts` and `manifest.ts` to paint palette-matched, exact-ratio labeled canvas textures (64px hero grid, 5 parallax plates with crop/safe-area rulers, lily atlases, and landmark cutouts) whenever files in `public/assets/` are absent.
+*   **Type / Scope**: Procedural calibration textures and non-blocking asset loader.
+*   **Proposed Changes**: Exports `loadTextureWithPlaceholder(...)` plus synchronous canvas placeholder builders (`<= 2048px` texture caps, `SRGBColorSpace`): Slice 1 paints the `64x64` (`68px` stride) hero grid and 5 palette-matched parallax plates with `HORIZON_Y` and safe-area rulers; Slice 2 paints `256x256` (`2x2`) lily leaf/bell atlases; Slice 3 paints `128x128` landmark cutouts. Immediately attaches the placeholder texture so rendering never stalls, asynchronously tries `THREE.TextureLoader` on the primary `.webp` path (falling back once to `.png` if `.webp` fails to load), applies `NearestFilter`/`SRGBColorSpace` per contract and swaps `.map` while calling `.dispose()` on the placeholder, or retains the placeholder and logs `'placeholder'` to `window.__HD2D_DIAG__` on fetch failure.
 
-#### 9. `src/state/appState.ts` (`Create`, `[Slice 1]`, expanded `[Slice 3]`)
+#### 9. `src/state/appState.ts` (`Create`, `[Slice 1]`, expanded `[Slice 2-3]`)
 
 *   **Type / Scope**: Centralized application state machine.
-*   **Proposed Changes**: Manages modes (`TITLE_IDLE`, `EXPLORING`, `DIALOGUE`, `WORKS_PICKER`, `INSPECT_CARD`, `ARCHIVE_DRAWER`, `FALLBACK_ARCHIVE`), `AudioStatus` (`UNSTARTED`, `PLAYING`, `MUTED`), hero `t`, `walkTarget`, `pendingInteractId`, active landmark/work IDs, and reactive `prefers-reduced-motion` state subscriptions.
+*   **Proposed Changes**: Defines `AppMode = 'TITLE_IDLE' | 'EXPLORING' | 'DIALOGUE' | 'WORKS_PICKER' | 'INSPECT_CARD' | 'ARCHIVE_DRAWER' | 'FALLBACK_ARCHIVE'`, `AudioStatus = 'UNSTARTED' | 'PLAYING' | 'MUTED'`, and `AppState` fields (`mode`, `previousMode`, `audioStatus`, `heroT`, `facingDir`, `walkTargetT`, `pendingInteractKey`, `activeLandmarkKey`, `dialoguePageIndex`, `dialogueRevealed`, `pickerIndex`, `activeWorkId`, `reducedMotion`, `whisperVisible`). Accepts optional injected `{ matchMedia, now }` adapters so `prefers-reduced-motion` media-query tracking and subscriber callbacks run natively in Vitest `node` tests (consumed in Slice 2/3 by wind and typewriter systems). Enforces: clicking `Mute` while `audioStatus === 'UNSTARTED'` transitions to `'MUTED'` (staying silent on subsequent wake); opening `ARCHIVE_DRAWER` stores `previousMode` (restoring it on close); and `FALLBACK_ARCHIVE` is terminal.
 
 #### 10. `src/input/inputRouter.ts` (`Create`, `[Slice 1]`, expanded `[Slice 3]`)
 
-*   **Type / Scope**: Unified pointer and keyboard input controller.
-*   **Proposed Changes**: Enforces zero-walk first wake clicks in `TITLE_IDLE`; immediate non-blocking `A`/`D`/Arrow transitions to `EXPLORING` leaving audio `UNSTARTED`; `150ms` window-refocus guard; `8px` pointer drag guard; immediate keyboard cancel of active click/tap walk targets; landmark hit-sphere priority ahead of `z = 0` spline X-projection; and DOM overlay propagation/focus isolation.
+*   **Type / Scope**: Unified pointer and keyboard input controller with pure guard helpers.
+*   **Proposed Changes**: Exports pure DOM-free helpers `isRefocusClick(nowMs, lastFocusMs)` (`nowMs - lastFocusMs < 150`) and `isDragGesture(startX, startY, endX, endY)` (`Math.hypot(endX - startX, endY - startY) > 8`) alongside the event router:
+    *   Filters non-primary pointers (`!event.isPrimary`), non-left mouse buttons (`event.pointerType === 'mouse' && event.button !== 0`), refocus clicks (`< 150ms`), and drags (`> 8px`), and tracks `activePointerId` across down/up plus clearing held movement keys on `window` `blur`.
+    *   In `TITLE_IDLE`: first valid canvas pointerup outside HUD triggers `wakeAudio` and transitions to `EXPLORING` without setting `walkTargetT`; first `A`/`D`/Arrow transitions to `EXPLORING` immediately while leaving `audioStatus === 'UNSTARTED'`.
+    *   In `EXPLORING`: `A`/`D`/Arrow presses immediately cancel `walkTargetT` and `pendingInteractKey`. Canvas pointerup raycasts landmark hit spheres first (setting `walkTargetT` + `pendingInteractKey` if out of range, or opening dialogue immediately if in range); otherwise intersects the `z = 0` plane (clamping ray X onto `[0, 1]` ridge bounds if the click ray points above the horizon) to set `walkTargetT`. Also unlocks audio if `audioStatus === 'UNSTARTED'` on a valid canvas click.
+    *   In Slice 3: routes `E`/`Space`/`Enter` for interaction and advance, `W`/`S`/Arrows/`Enter`/`E`/`Space` inside `WORKS_PICKER`, and `Esc` dismissal for `INSPECT_CARD`, `WORKS_PICKER`, and `ARCHIVE_DRAWER` (ignored in `FALLBACK_ARCHIVE`), gating scene listeners whenever `appState.mode !== 'EXPLORING' && appState.mode !== 'TITLE_IDLE'`.
 
 #### 11. `src/scene/renderer.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: WebGL renderer and failure-guard module.
-*   **Proposed Changes**: Creates `WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })` with bounded DPR (`<= 2.0` desktop, `<= 1.5` mobile), `SRGBColorSpace`, and `NoToneMapping`; attaches `webglcontextlost` and init guards that trigger `FALLBACK_ARCHIVE`; records events in `window.__HD2D_DIAG__`; and serves optional `?debug=1` runtime readouts.
+*   **Type / Scope**: WebGL renderer, diagnostics buffer, and `?debug=1` HUD module.
+*   **Proposed Changes**: Probes `?noMsaa=1` and `?loseContext=1` URL query params, then creates `new THREE.WebGLRenderer({ canvas, antialias: !noMsaa, powerPreference: 'high-performance' })` inside a `try/catch` guard (entering `FALLBACK_ARCHIVE` immediately on creation failure). Caps DPR via `window.matchMedia('(pointer: coarse)').matches ? Math.min(devicePixelRatio, 1.5) : Math.min(devicePixelRatio, 2.0)`, sets `SRGBColorSpace`, `NoToneMapping`, and calls `renderer.setSize(w, h, false)`. Attaches `webglcontextlost` calling `event.preventDefault()`, disposes scene resources, and enters `FALLBACK_ARCHIVE` deterministically (reproducible via `?loseContext=1` triggering `WEBGL_lose_context`). Populates typed `window.__HD2D_DIAG__` (`{ webglReady, msaaSamples, activeAlphaTest, dpr, assetSources, audioStatus, events[] }`) and displays an optional `?debug=1` diagnostic HUD (FPS, draw calls, triangles, `msaaSamples`, `activeAlphaTest`, `mode`, `heroT`, and a `[G]` / button toggle controlling `plates.ts` alignment guides).
 
 #### 12. `src/scene/camera.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Camera rig controller.
-*   **Proposed Changes**: Implements the Itay Keren horizontal deadzone spring camera (zero initial look-ahead at `t = 0.50`, critically damped follow, `prefers-reduced-motion` overshoot bypass), responsive Hor+ and moderate portrait pullback framing from `layout.ts`, and idle desktop `(hover: hover)` mouse-look parallax.
+*   **Type / Scope**: Damped deadzone spring camera controller.
+*   **Proposed Changes**: Reads `computeCameraFraming(aspect)` from `layout.ts` (including `1.0..1.45` portrait pullback). Maintains horizontal deadzone (`DEADZONE_HALF_WIDTH = 1.6` units), look-ahead offset (`0` at spawn `t = 0.50`, ramping smoothly up to `1.2 * facingDir` only once walking begins), critically damped spring (`smoothTime = 0.18`s; snaps without overshoot when `reducedMotion === true`), and clamps camera X within `[-MAX_CAMERA_PAN * 0.5, +MAX_CAMERA_PAN * 0.5]` (`[-8, +8]`) so plates never expose edges. Applies idle desktop `(hover: hover)` mouse-look parallax (max `0.45`u X, `0.25`u Y, smoothed at `0.12`s) strictly when `mode === 'EXPLORING' || mode === 'TITLE_IDLE'` and `!reducedMotion`, easing back to `0` when dialogue or overlays open.
 
 #### 13. `src/scene/hero.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Hero pixel-art sprite controller.
-*   **Proposed Changes**: Renders the 64px sprite plane with `NearestFilter`, `generateMipmaps = false`, `alphaTest = 0.5`, and `side: THREE.DoubleSide`; mirrors horizontally (`scale.x = -1`) on `+X` walk; locks bottom-center foot pivot to `sampleRidge(t)`; and steps UV frames respecting 2px transparent gutters.
+*   **Type / Scope**: Hero pixel-art sprite mesh and UV animator.
+*   **Proposed Changes**: Builds and animates a `HERO_WORLD_WIDTH x HERO_WORLD_HEIGHT` (`2.2 x 2.2`u) `THREE.PlaneGeometry` mesh with `MeshBasicMaterial({ alphaTest: 0.5, side: THREE.DoubleSide })` and enforces `texture.magFilter = THREE.NearestFilter`, `texture.minFilter = THREE.NearestFilter`, `texture.generateMipmaps = false`. Mirrors horizontally via `mesh.scale.x = -1` when walking right (`+X`), translates the plane Y by `HERO_WORLD_HEIGHT * (0.5 - footPivotY / 64)` above `sampleRidge(t).y` so boots stay anchored at `z = 0`, and steps UV repeat/offset across the `68px` cell stride (`64px` frame + `2px` padding), switching between row 0 (`4` idle wind frames at `6 FPS`) when stationary and row 1 (`6` walk frames at `10 FPS`) while moving.
 
-#### 14. `src/scene/plates.ts` (`Create`, `[Slice 1]`, wind UV hook `[Slice 2]`)
+#### 14. `src/scene/plates.ts` (`Create`, `[Slice 1]`, cloud UV hook `[Slice 2]`)
 
 *   **Type / Scope**: Parallax backdrop and foreground-lip layer builder.
-*   **Proposed Changes**: Places all 5 parallax plates from `manifest.ts` (`offsetX`, `offsetY`, `worldWidth`, `worldHeight`), applying `fog: false` or tuned `uFogMix` (`onBeforeCompile` + `customProgramCacheKey('plate-fog-mix')`), `RepeatWrapping` plus monotonic `windDrift` UV scroll on `clouds` (`customProgramCacheKey('cloud-drift')`), and knee-deep front ordering for `foregroundLip`. Exposes a lightweight `horizonY` guideline and cropped-plate wireframe bounding-box toggle under `?debug=1` so re-crop realignment is immediate.
+*   **Proposed Changes**: Builds `PlaneGeometry(worldWidth, worldHeight)` meshes positioned from `manifest.ts` (`offsetX`, `offsetY`, `z`) with `mesh.position.x = plate.offsetX + cameraX * plate.parallax` (`transparent: true`, `depthWrite: false`). Plates with `fogMix === 0` (`clouds`, `foregroundLip`) set `fog: false`; `foregroundLip` sets `renderOrder = 10` for knee-deep ordering in front of `z = 0`. Architectural plates with `fogMix > 0` (`citadel`, `ghostCastle`, `watchtower`) set `fog: true`, attach one `onBeforeCompile` hook (`customProgramCacheKey: () => 'plate-fog-mix'`) overriding `#include <fog_fragment>` to `mix(gl_FragColor.rgb, fogColor, fogFactor * uFogMix)`, and keep `clouds` at `fogMix: 0` (`fog: false`, `RepeatWrapping`) with a single `onBeforeCompile` hook (`customProgramCacheKey: () => 'cloud-drift'`) shifting `vMapUv.x` inside `#include <uv_vertex>` by `uDriftOffset * 0.015`. Displays a `HORIZON_Y` guideline and cropped-plate wireframe bounding boxes under `?debug=1` (`[G]` toggle) to verify re-crop alignment.
 
 #### 15. `src/scene/shaders/wind.glsl.ts` (`Create`, `[Slice 2]`)
 
-*   **Type / Scope**: Shared GLSL wind module.
-*   **Proposed Changes**: Provides one shared `uTime`, `uWindStrength`, and Simplex gust system exporting oscillating `windSway` (for foliage) and monotonic negative-X `windDrift` (for clouds and petals).
+*   **Type / Scope**: Shared GLSL wind module and uniform clock.
+*   **Proposed Changes**: Exports GLSL snippets (`windSway`, `windDrift`) and shared TypeScript uniform manager `{ uTime, uWindStrength, uDriftOffset }` (`uWindStrength` in `0..1`, `0` under `prefers-reduced-motion`). Exports `advanceDriftOffset(prevOffset, dt, windStrength, time)` integrating strictly positive `dt * (1.0 + 0.35 * sin(time * 0.4)) * windStrength` on CPU into negative-X `uDriftOffset`, guaranteeing monotonic drift with zero reversal when gusts fall.
 
 #### 16. `src/scene/sky.ts` (`Create`, `[Slice 2]`)
 
-*   **Type / Scope**: Atmospheric sky dome shader.
-*   **Proposed Changes**: Renders the overcast pearl-ivory-beige sky gradient plane/dome at `z = -120` with `fog: false` and a pre-softened upper horizon.
+*   **Type / Scope**: Overcast atmospheric sky background plane.
+*   **Proposed Changes**: Builds a `160 x 70`u `PlaneGeometry` centered at `(0, 12, -120)` with `ShaderMaterial({ fog: false, depthWrite: false })` and `renderOrder = -10` (covering `21:9` + `MAX_CAMERA_PAN` + `1.45` portrait pullback), blending vertical UV gradient stops `#ddd8cc` (upper overcast ivory-beige) to `#ebe7dc` (warm pearl mid-sky) and a `smoothstep`-blended `#c9ced6` horizon haze band.
 
 #### 17. `src/scene/foliage.ts` (`Create`, `[Slice 2]`)
 
-*   **Type / Scope**: Curved meadow terrain and `InstancedMesh` lily field.
-*   **Proposed Changes**: Builds the curved hill mesh and instanced lily leaf/bell cards using `MeshBasicMaterial` + `onBeforeCompile` (`customProgramCacheKey('lily-wind')`), enabling `alphaToCoverage: true`, `transparent: false`, and `alphaTest: 0.3` when MSAA is active (falling back to `alphaToCoverage: false`, `alphaTest: 0.5` otherwise), blended with `THREE.FogExp2`.
+*   **Type / Scope**: Curved hilltop terrain and `InstancedMesh` lily meadow.
+*   **Proposed Changes**: Builds a `56 x 16`u subdivided curved hill mesh (`#5b6e5d`, `fog: true`) tracking `sampleRidge(t)` with downward front/back skirts. Scatters `1800` lily leaf cards (`0.38 x 0.46`u) and `900` lily bell-flower cards (`0.32 x 0.44`u) using deterministic Mulberry32 PRNG (`seed = 0x56504844`). Configures `frustumCulled = false`, `side: THREE.DoubleSide`, `fog: true`, `InstancedBufferAttribute` `aCellIndex` (`0..3`) and `aPhase`, and `MeshBasicMaterial` + `onBeforeCompile` (`customProgramCacheKey: () => 'lily-wind'`) offsetting `vMapUv` in `#include <uv_vertex>` for the `2x2` atlas and displacing `#include <begin_vertex>` via `windSway(instanceMatrix[3].xyz, uv.y, aPhase, uTime, uWindStrength)`. Enables `alphaToCoverage: true, transparent: false, alphaTest: 0.3` when `renderer.getContextAttributes()?.antialias === true` (falling back to `alphaToCoverage: false, alphaTest: 0.5` when MSAA is disabled).
 
 #### 18. `src/scene/petals.ts` (`Create`, `[Slice 2]`)
 
-*   **Type / Scope**: Tumbling petal `InstancedMesh` system.
-*   **Proposed Changes**: Renders a single 150-to-250-quad `InstancedMesh` batch across multiple Z depths driven by `windDrift` with 3D tumbling pitch/yaw/roll and camera-frustum wrapping (halted or minimized under `prefers-reduced-motion`).
+*   **Type / Scope**: Tumbling petal `InstancedMesh` batch.
+*   **Proposed Changes**: Builds and updates a single `200`-quad `InstancedMesh` (`0.18 x 0.18`u warm ivory `#f2efe4`, scattered across `z in [-8, +3]`, `frustumCulled = false`, `transparent: true, opacity: 0.88, depthWrite: false, side: THREE.DoubleSide`, `fog: true`) using seeded per-instance `aSeed` (`vec4`) attributes and `onBeforeCompile` (`customProgramCacheKey: () => 'petal-drift'`) driven by `uDriftOffset`, `uTime`, `uWindStrength`, and `uCameraX` to tumble in 3D (pitch/yaw/roll) and wrap continuously across a `40 x 18`u camera-centered frustum window (`mod()` wrapping). Setting `uWindStrength = 0` under `prefers-reduced-motion` freezes petal drift and tumble in place.
 
-#### 19. `src/content/nodes.json` (`Create`, `[Slice 3]`, final copy `[Slice 4]`)
+#### 19. `src/content/nodes.json` (`Create`, `[Slice 1]`, final copy `[Slice 4]`)
 
-*   **Type / Scope**: Editorial narrative and portfolio data.
-*   **Proposed Changes**: Stores schema-version-1 copy for the 4 landmarks (`about`, `works` with 2-3 projects + `inspect` payloads, `interests`, `contact`) and optional `audioCredit`, using explicitly labeled `[PLACEHOLDER]` copy until final owner writing arrives.
+*   **Type / Scope**: Editorial portfolio content JSON.
+*   **Proposed Changes**: Static ES module JSON (`schemaVersion: 1`) holding the 4 landmarks (`about`, `works` with `2` to `3` project items and `inspect` payloads, `interests`, `contact`) and optional `audioCredit`. Populated with explicitly labeled `[PLACEHOLDER]` text in Slice 1 so `archiveDrawer.ts` and `FALLBACK_ARCHIVE` work immediately, then replaced with final owner prose in Slice 4.
 
-#### 20. `src/content/validateNodes.ts` (`Create`, `[Slice 3]`)
+#### 20. `src/content/validateNodes.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Content schema and URL validator.
-*   **Proposed Changes**: Validates loaded `nodes.json` structure, required landmark keys, and strict `https:`/`mailto:` URL protocol allowlisting, providing clear diagnostic errors on malformed entries.
+*   **Type / Scope**: Content schema and URL security validator.
+*   **Proposed Changes**: Exports throwing `validateNodes(input: unknown): NodesDocument`. Verifies `schemaVersion === 1`, exact presence and uniqueness of all 4 `landmarkKey` entries (`about`, `works`, `interests`, `contact`), non-empty `title` and `lines[]` strings, `works` array length `2` to `3` on the `'works'` node (each with non-empty `id`, `title`, `reflection[]`, and `inspect`), outbound `url` schemes strictly limited to `https:` or `mailto:`, and optional `inspect.image` paths strictly limited to `https:` URLs or safe `./assets/...` paths with no `..` traversal, throwing field-specific `Error` messages on violation.
 
 #### 21. `src/scene/landmarks.ts` (`Create`, `[Slice 3]`)
 
-*   **Type / Scope**: Interactive 3D landmark cutouts and proximity cues.
-*   **Proposed Changes**: Places the 4 landmark planes along `layout.ts` `LANDMARK_T`, attaches soft warm-ivory additive glow quads (`AdditiveBlending`, `depthWrite: false`), builds generous raycast hit spheres, and projects screen-space coordinates for the in-range `[E]`/tap cue.
+*   **Type / Scope**: Interactive 3D landmark cutouts, additive glows, and `[E]` projection.
+*   **Proposed Changes**: Places the 4 landmark cutout planes from `LANDMARK_T` and `manifest.ts.landmarks` (`1.8 x 1.8`u at `sampleRidge(t)` with `zOffset: -0.15`), attaches alpha-gradient warm-ivory `#f2efe4` additive glow planes (`2.4 x 2.4`u, `AdditiveBlending`, `depthWrite: false`, opacity modulated gently when in range and static under `reducedMotion`), assigns raycast hit spheres (`hitRadius: 1.4`u), and projects landmark anchor coordinates to CSS screen pixels (`ndc.z <= 1` guard) for positioning the in-range `[E]`/tap cue.
 
 #### 22. `src/scene/sceneController.ts` (`Create`, `[Slice 1]`, expanded `[Slice 2-3]`)
 
 *   **Type / Scope**: Three.js scene lifecycle orchestrator.
-*   **Proposed Changes**: Wires renderer, camera, sky, plates, foliage, petals, hero, and landmarks; manages `resize` framing updates, clamped-delta `rAF` animation ticks, and complete GPU `.dispose()` teardown.
+*   **Proposed Changes**: Initializes and coordinates `scene`, `camera`, `hero`, and `plates` in Slice 1; attaches `scene.fog = new THREE.FogExp2(0xc9ced6, 0.018)`, `sky`, `foliage`, and `petals` in Slice 2; and attaches `landmarks` in Slice 3. Clamps `rAF` frame deltas to `dt <= 0.05`s, integrates `heroT` movement along `sampleRidge(t)` using `WALK_SPEED * computeEndpointDamping(t, dir)`, resolves `walkTargetT` and `pendingInteractKey` arrivals, listens to `window` and `visualViewport` `resize` (`renderer.setSize(w, h, false)`), and disposes all geometries, materials, textures, and the renderer safely even after WebGL context loss.
 
 #### 23. `src/ui/styles.css` (`Create`, `[Slice 1]`, expanded `[Slice 3]`)
 
-*   **Type / Scope**: UI and vignette stylesheet.
-*   **Proposed Changes**: Locks `100vw x 100dvh` layout, adds the `pointer-events: none` CSS `radial-gradient` vignette, and styles the PS1/PSP JRPG dialogue box, works picker, `[Inspect]` card, and `Index/Archive` `<dialog>` with `1px` crisp borders, WCAG AA `>= 4.5:1` contrast, `44px` minimum mobile tap targets, visible focus indicators, and zero glassmorphism.
+*   **Type / Scope**: Layout, vignette, and JRPG UI stylesheet.
+*   **Proposed Changes**: Enforces `width: 100vw; height: 100dvh; overflow: hidden; margin: 0` with `env(safe-area-inset-*)` corner padding, `touch-action: none` on `#scene-canvas`, `pointer-events: none` CSS `radial-gradient` vignette, solid `1px` JRPG borders (`#7b8898`) on opaque dark-slate surfaces (`#141820`, ivory text `#f2efe4`, WCAG AA contrast `>= 4.5:1`, zero glassmorphism), system sans/serif legible stack, `44px` minimum mobile tap targets, visible `:focus-visible` outlines, whisper prompt, `[E]`/tap cue, `168px` max bottom dialogue reserve, `WORKS_PICKER`, `[Inspect]` card, `<dialog>` `Index/Archive` + non-modal `FALLBACK_ARCHIVE` styling, `?debug=1` readout box, and `@media (prefers-reduced-motion: reduce)` animation suppression.
 
 #### 24. `src/ui/hudControls.ts` (`Create`, `[Slice 1]`, expanded `[Slice 3]`)
 
-*   **Type / Scope**: Corner HUD, whisper prompt, and diegetic cue controller.
-*   **Proposed Changes**: Renders and manages the lower-frame `"Click anywhere to begin"` whisper prompt, in-range `[E]`/tap cue, corner `Index/Archive` trigger, and corner sound toggle distinguishing `UNSTARTED`, `PLAYING`, and `MUTED`.
+*   **Type / Scope**: Corner controls, whisper cue, and diegetic `[E]` badge controller.
+*   **Proposed Changes**: Mounts and updates Slice 1 elements (`#whisper-cue` `"Click anywhere to begin"` fading out on Path A wake or Path B movement start, plus corner `Index/Archive` button) and Slice 3 elements (corner `Sound / Mute` button with distinct `UNSTARTED` `"Sound: Off (Click to play)"`, `PLAYING`, and `MUTED` labels/`aria-pressed` states, and the projected `[E]`/tap cue button shown only within `INTERACT_RADIUS`). Calls `event.stopPropagation()` on all pointer events so HUD clicks never trigger canvas walking.
 
 #### 25. `src/ui/dialogueBox.ts` (`Create`, `[Slice 3]`)
 
-*   **Type / Scope**: JRPG dialogue box controller.
-*   **Proposed Changes**: Streams text into an `aria-live="polite"` bottom container via `textContent`, completing the current line on first press, advancing on second press, and displaying instantly under `prefers-reduced-motion`.
+*   **Type / Scope**: JRPG bottom dialogue box controller.
+*   **Proposed Changes**: Renders dialogue text inside `#dialogue-root` at `36` characters per second via `textContent` on an `aria-hidden="true"` visual span while updating an `aria-live="polite"` off-screen/semantic announcer span once per completed line (preventing screen-reader fragment stutter). Pressing `E`/`Space`/`Enter` or tapping the dialogue box (calling `stopPropagation`) finishes the line immediately on first press, advances on second press, transitions `works` landmark from `lines[]` into `WORKS_PICKER` (or returns to `WORKS_PICKER` after a work's `reflection[]`, or closes to `EXPLORING` on `about`/`interests`/`contact`), and shows lines immediately when `reducedMotion === true`.
 
 #### 26. `src/ui/worksPicker.ts` (`Create`, `[Slice 3]`)
 
 *   **Type / Scope**: Selected Works vertical JRPG choice menu.
-*   **Proposed Changes**: Lists 2 to 3 project titles with a cursor arrow inside the dialogue flow, navigable via `W`/`S`, Up/Down arrows, click, or tap before opening a project's reflection and `[Inspect]` action.
+*   **Proposed Changes**: Renders the `2` to `3` project titles from `nodes.json` plus a final `"Leave"` option with a cursor indicator, navigable via `W`/`S`, Up/Down arrows, pointer hover/click, or tap (`stopPropagation`). Pressing `Enter`/`E`/`Space` or clicking/tapping opens the project's `reflection[]` with an `[Inspect]` trigger button, while selecting `"Leave"` or pressing `Esc` returns cleanly to `EXPLORING`.
 
 #### 27. `src/ui/inspectCard.ts` (`Create`, `[Slice 3]`)
 
-*   **Type / Scope**: Plain Selected Works preview overlay.
-*   **Proposed Changes**: Displays a single thumbnail image/note and validated outbound link inside a dismissible JRPG-bordered card, returning focus cleanly to dialogue on `Esc` or close.
+*   **Type / Scope**: Plain Selected Works preview card.
+*   **Proposed Changes**: Displays a single thumbnail image (omitting the image frame cleanly or showing the note alone if `inspect.image` is absent or fails to load) alongside the validated `note` (`textContent`) and outbound link (`target="_blank" rel="noopener noreferrer"`). Pressing `Esc` or activating Close returns to `WORKS_PICKER` (restoring prior focus).
 
-#### 28. `src/ui/archiveDrawer.ts` (`Create`, `[Slice 1]` skeleton + fallback, full data `[Slice 3]`)
+#### 28. `src/ui/archiveDrawer.ts` (`Create`, `[Slice 1]`, expanded `[Slice 3]`)
 
-*   **Type / Scope**: Accessible semantic HTML `Index/Archive` drawer.
-*   **Proposed Changes**: Populates a `<dialog>` view directly from validated `nodes.json` with focus trapping and `Esc` dismissal, and promotes itself into a full-page readable layout automatically in `FALLBACK_ARCHIVE`.
+*   **Type / Scope**: Semantic HTML `Index/Archive` drawer and WebGL fallback view.
+*   **Proposed Changes**: Renders all validated `nodes.json` landmark titles, prose lines, Selected Works notes/links, `audioCredit`, and `prefers-reduced-motion` info into `<dialog id="archive-dialog">` using safe DOM builders (`target="_blank" rel="noopener noreferrer"` on external links). Opens via `.showModal()` in `ARCHIVE_DRAWER` (`Esc` or Close button returns to `previousMode` and restores focus to the `Index/Archive` button). Switches to a non-dismissible full-page static layout in `FALLBACK_ARCHIVE` (calling `event.preventDefault()` on `<dialog>` `cancel` events and hiding/disabling the close button so a broken WebGL canvas is never revealed).
 
 #### 29. `src/audio/audioEngine.ts` (`Create`, `[Slice 3]`)
 
-*   **Type / Scope**: Web Audio BGM and pink-noise engine.
-*   **Proposed Changes**: Synchronously creates/resumes `AudioContext` on first pointer gesture outside Mute; decodes `.mp3`/`.m4a` primary (optional `.ogg`) via `decodeAudioData` into a looping `AudioBufferSourceNode` on `bgmGain` with a 2s fade-in; loops a pre-baked 4s Paul Kellet pink-noise `AudioBuffer` through a wind-modulated lowpass `BiquadFilterNode` on `windGain`; routes both through `masterMuteGain`; and handles `visibilitychange` suspend/resume.
+*   **Type / Scope**: Web Audio BGM and pink-noise wind bed engine.
+*   **Proposed Changes**: Synchronously initializes/resumes `AudioContext` on the first pointer gesture outside `Mute`. Probes codec support via `audioElement.canPlayType('audio/mpeg')` / `'audio/mp4'` ahead of optional `'audio/ogg'`. Fetches and decodes BGM via `decodeAudioData` into a looping `AudioBufferSourceNode` routed to `bgmGain` (`0.45` target) using a monotonic `decodeSeq` cancellation token (discarding playback if the user clicks `Mute` mid-decode) and linear `setValueAtTime(0.0001)` -> `linearRampToValueAtTime(0.45, t + 2.0)` fade-in (never calling `exponentialRampToValueAtTime` from `0`). Loops a crossfaded 4s Paul Kellet pink-noise `AudioBuffer` through a wind-modulated lowpass `BiquadFilterNode` (`320` to `780` Hz, `Q = 0.7`, `0.11 Hz` LFO) on `windGain` (`0.08` target), feeding `masterMuteGain`. Missing BGM (404 before Slice 4) logs cleanly to `window.__HD2D_DIAG__` while still keeping the pink-noise bed running. Suspends `AudioContext` when `document.visibilityState === 'hidden'` and resumes on `'visible'` only if `appState.audioStatus === 'PLAYING'`.
 
 #### 30. `src/main.ts` (`Create`, `[Slice 1]`, expanded `[Slice 2-3]`)
 
 *   **Type / Scope**: Application bootstrap entry point.
-*   **Proposed Changes**: Loads and validates `nodes.json`, initializes `appState` and `archiveDrawer`, creates the WebGL renderer inside a failure guard (falling back directly to `FALLBACK_ARCHIVE` on error), and binds `sceneController`, `inputRouter`, `ui`, and `audioEngine`.
+*   **Proposed Changes**: Imports `nodes.json` statically, validates it with `validateNodes`, initializes `appState`, and mounts `archiveDrawer`. Slice 1 creates `renderer`, `sceneController` (hero + 5 placeholder plates), `inputRouter`, and `hudControls`, wiring WebGL initialization/context-loss failure directly to `FALLBACK_ARCHIVE`. Slice 2 connects sky, foliage, petals, and shared wind updates into `sceneController`. Slice 3 connects `landmarks`, `dialogueBox`, `worksPicker`, `inspectCard`, and `audioEngine`.
 
 #### 31. `tests/layout.test.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Unit test suite for spatial layout math.
-*   **Proposed Changes**: Tests `sampleRidge(t)` bounds and outer 5% endpoint damping, `minPlateWidth` >= 21:9 + pan, portrait pullback clamp (`1.0..1.45`), and `about` (`t = 0.43`) separation outside `interactRadius` from spawn (`t = 0.50`).
+*   **Type / Scope**: Unit tests for spatial math and manifest invariants.
+*   **Proposed Changes**: Verifies `sampleRidge(t)` X/Y/Z bounds (`|z| <= 0.3 <= 0.4`), directional `computeEndpointDamping(t, dir)` braking outward in `t < 0.05` / `t > 0.95` while returning `1.0` when walking inward from `t = 0` and `t = 1`, `minPlateWidth(z, parallax)` exceeding 21:9 frustum width plus pan, `computeCameraFraming(aspect)` across `21:9`, `4:3`, `1:1`, and `9:16` (`pullback` clamped in `1.0..1.45` and portrait `targetOffsetY < 0.9`), `cropPixelsToManifest` math, `about` (`t = 0.43`) separation outside `INTERACT_RADIUS = 2.0` from `t = 0.50`, and `manifest.ts` invariants (unique landmark keys, `horizonY` in `[0, 1]`, positive world sizes).
 
 #### 32. `tests/appState.test.ts` (`Create`, `[Slice 1]`, expanded `[Slice 3]`)
 
-*   **Type / Scope**: Unit test suite for state machine and input guards.
-*   **Proposed Changes**: Tests `TITLE_IDLE` transitions, zero-walk wake click, `A`/`D`-first keeping audio `UNSTARTED`, `150ms` refocus guard, `8px` drag guard, keyboard canceling `walkTarget`, and `FALLBACK_ARCHIVE` failover.
+*   **Type / Scope**: Unit tests for state machine and pure input guards in Vitest `node`.
+*   **Proposed Changes**: Tests `appState.ts` using injected `{ matchMedia, now }` adapters plus pure `isRefocusClick` and `isDragGesture` helpers: `TITLE_IDLE` zero-walk first wake click, `A`/`D`-first keeping `audioStatus === 'UNSTARTED'`, `Mute` from `UNSTARTED` transitions, `150ms` refocus guard, `8px` drag guard, keyboard canceling `walkTargetT` and `pendingInteractKey`, `pendingInteractKey` auto-open on landmark arrival, `DIALOGUE <-> WORKS_PICKER <-> INSPECT_CARD` transitions, `ARCHIVE_DRAWER` `previousMode` restore, `prefers-reduced-motion` tracking, and `FALLBACK_ARCHIVE` terminal lock.
 
-#### 33. `tests/validateNodes.test.ts` (`Create`, `[Slice 3]`)
+#### 33. `tests/validateNodes.test.ts` (`Create`, `[Slice 1]`)
 
-*   **Type / Scope**: Unit test suite for `nodes.json` schema validation.
-*   **Proposed Changes**: Verifies valid 4-node documents pass, missing landmarks/fields fail loudly, and unsafe URL protocols (such as `javascript:`) are rejected.
+*   **Type / Scope**: Unit tests for `nodes.json` schema validation.
+*   **Proposed Changes**: Verifies valid 4-node documents pass; missing/duplicate `landmarkKey` entries, empty `lines[]`/`reflection[]`, and `works` lengths outside `2..3` throw field-specific `Error` messages; `validateNodes` rejects unsafe URL protocols (`javascript:`, `http:`, `data:`) on outbound links; and `inspect.image` accepts `https:` and safe `./assets/...` paths while rejecting `data:` and `..` path traversal.
 
 #### 34. `public/assets/README.md` (`Create`, `[Slice 1]`)
 
 *   **Type / Scope**: Owner art and audio drop-in specification.
-*   **Proposed Changes**: Documents a shared master-canvas workflow (painting `citadel`, `ghostCastle`, and `watchtower` on one reference canvas with a marked `horizonY` line), the exact conversion formula mapping trimmed layer pixel bounds (`cropX`, `cropY`, `cropW`, `cropH`) onto `offsetX`, `offsetY`, `worldWidth`, and `worldHeight` in `manifest.ts`, `.webp` primary plate export rules (`.png` accepted for local testing), horizontally tileable `clouds.webp`, 64px sprite gutters/pivot, and licensed `.mp3`/`.m4a` audio rules.
+*   **Proposed Changes**: Documents the `3840 x 1600` (`40 px/unit`, `HORIZON_Y` at `y = 1040 px`) master-canvas workflow for `citadel.webp`, `ghost-castle.webp`, and `watchtower.webp`, the `cropPixelsToManifest(cropX, cropY, cropW, cropH)` formula, `.webp` primary export rules (`.png` accepted for local testing), horizontally tileable `clouds.webp`, pre-softened `foreground-lip.webp`, `2x2` `128x128` `lily-leaves.png` and `lily-bells.png` atlases, `64x64` (`68px` padded stride) `hero.png` layout/pivot, `landmarks/*.png`, and licensed `.mp3`/`.m4a` (optional `.ogg`) audio constraints.
 
 #### 35. `AGENTS.md`, `BRAIN.md`, `CHANGELOG.md`, `llms.txt` (`Modify`, `[Slice 1-4]`)
 
-*   **Type / Scope**: Project governance and working-memory docs.
-*   **Proposed Changes**: Sync WebP primary plate format and crop/placement manifest metadata at Slice 1 start, update completed slice status and `[Unreleased]` entries after each slice, and build/refresh git-ignored `graphify-out/` after Slice 1.
+*   **Type / Scope**: Project governance and working-memory documentation.
+*   **Proposed Changes**: Updates completed slice status, `Asset Status`, `llms.txt` implemented layout links, and `[Unreleased]` changelog entries after each completed slice.
+
+#### 36. `public/assets/*` (`Create/Replace`, `[Slice 4]`)
+
+*   **Type / Scope**: Final owner-produced art and licensed audio assets.
+*   **Proposed Changes**: Places final owner assets at `public/assets/sprites/hero.png`, `public/assets/foliage/lily-leaves.png`, `public/assets/foliage/lily-bells.png`, `public/assets/backdrop/citadel.webp`, `public/assets/backdrop/ghost-castle.webp`, `public/assets/backdrop/watchtower.webp`, `public/assets/backdrop/clouds.webp`, `public/assets/backdrop/foreground-lip.webp`, `public/assets/landmarks/{about,works,interests,contact}.png`, `public/assets/audio/theme.mp3` (plus optional `theme.ogg`), and optional `public/assets/works/*.webp` thumbnails, updating `manifest.ts` crop values if owner plate crop bounds change.
 
 ### Verification Plan
 
-*   **Compilation / Build:** `npm run build` (`tsc --noEmit && vite build`) exits `0` with zero TypeScript or Vite bundling errors.
-*   **Unit Tests:** `npm test` (`vitest run`) passes all cases in `tests/layout.test.ts`, `tests/appState.test.ts`, and `tests/validateNodes.test.ts`.
-*   **Static Analysis & Linting:** `npm run lint` (`eslint .`) and `ESLint` MCP `lint-files` pass with zero errors or warnings on all edited TypeScript files.
+*   **Compilation / Build:** Run `npm run build` (`tsc --noEmit && vite build`) after every slice and verify exit status `0` with zero TypeScript or Vite errors.
+*   **Unit Tests:** Run `npm test` (`vitest run`) after every slice and verify 100% pass across `tests/layout.test.ts`, `tests/appState.test.ts`, and `tests/validateNodes.test.ts`.
+*   **Static Analysis & Linting:** Run `npm run lint` (`eslint .`) and `ESLint` MCP `lint-files` across all repository JS/TS files after every slice and verify zero errors or warnings.
 *   **Cross-Device & Runtime Integration Checks:**
-    *   Inspect `21:9`, `16:9`, `4:3`, and `9:16` (`100dvh`) viewports: zero plate edge clipping, readable 64px sprite above dialogue reserve on portrait, and smooth 5% endpoint deceleration.
-    *   Confirm `?debug=1` holds ~60 FPS on integrated GPU with native MSAA `alphaToCoverage` active on `InstancedMesh` lilies, and verify crisp `alphaTest: 0.5` fallback when MSAA is disabled.
-    *   Exercise CUJs 1 to 4 end to end: zero-walk first wake click vs. `A`/`D`-first audio `UNSTARTED` corner indicator, `150ms` refocus and `8px` drag guards, JRPG `WORKS_PICKER` + plain `[Inspect]` card, WCAG AA contrast and `Tab`/`Esc` flow in `Index/Archive`, `prefers-reduced-motion: reduce`, simulated `webglcontextlost` failover to `FALLBACK_ARCHIVE`, and iOS Safari Web Audio 2s fade-in + `Mute` toggle.
+    *   Inspect `21:9`, `16:9`, `4:3`, and `9:16` (`100dvh`) viewports: verify zero exposed plate edges across full ridge pan, `>= 44px` sprite height clear of the `168px` dialogue reserve on portrait mobile, `?debug=1` `[G]` wireframe alignment against `HORIZON_Y`, and monotonic velocity decay to `0` at cliff endpoints with immediate `1.0x` inward escape.
+    *   Verify via the `?debug=1` FPS readout that the scene holds ~60 FPS on an integrated GPU with native MSAA `alphaToCoverage` (`alphaTest: 0.3`, `msaaSamples >= 2`) active on `InstancedMesh` lilies, and test `?noMsaa=1` fallback rendering clean `alphaTest: 0.5` edges.
+    *   Exercise CUJs 1 to 4 end to end: zero-walk first wake click vs `A`/`D`-first audio `UNSTARTED` indicator, `150ms` refocus and `8px` drag guards, typewriter instant-finish/advance, `WORKS_PICKER` `W`/`S`/Arrows/`Enter`/`Esc` + `[Inspect]` missing-image fallback, WCAG AA contrast and `Tab`/`Esc` flow in `Index/Archive`, `prefers-reduced-motion: reduce` wind/petal freeze and instant text, `?loseContext=1` non-dismissible failover to `FALLBACK_ARCHIVE`, 404 BGM fallback keeping pink-noise wind running, and physical iOS Safari (or WebKit simulator) Web Audio 2s fade-in + `Mute` toggle.
 
 --------------------------------------------------------------------------------
 

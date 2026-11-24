@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "audioCredit": "[PLACEHOLDER] Replace with licensed CC0/CC-BY or original orchestral track attribution.",
+  "nodes": [
+    {
+      "landmarkKey": "about",
+      "title": "Lily Cluster [PLACEHOLDER]",
+      "lines": [
+        "[PLACEHOLDER] Replace with personal introduction and what draws you to building quiet interactive software.",
+        "[PLACEHOLDER] Second reflection line for the About landmark."
+      ]
+    },
+    {
+      "landmarkKey": "works",
+      "title": "Weathered Stone [PLACEHOLDER]",
+      "lines": [
+        "[PLACEHOLDER] Choose a carved tablet to examine a selected piece."
+      ],
+      "works": [
+        {
+          "id": "work-1",
+          "title": "[PLACEHOLDER] Project One",
+          "reflection": [
+            "[PLACEHOLDER] Short personal reflection on Project One."
+          ],
+          "inspect": {
+            "note": "[PLACEHOLDER] Replace with concise note on what this work explores.",
+            "url": "https://example.com/project-one",
+            "linkLabel": "Visit Project One"
+          }
+        },
+        {
+          "id": "work-2",
+          "title": "[PLACEHOLDER] Project Two",
+          "reflection": [
+            "[PLACEHOLDER] Short personal reflection on Project Two."
+          ],
+          "inspect": {
+            "note": "[PLACEHOLDER] Replace with concise note on Project Two.",
+            "url": "https://example.com/project-two",
+            "linkLabel": "Visit Project Two"
+          }
+        }
+      ]
+    },
+    {
+      "landmarkKey": "interests",
+      "title": "Cliffside Overlook [PLACEHOLDER]",
+      "lines": [
+        "[PLACEHOLDER] Share the games, scores, books, or quiet ideas that linger with you."
+      ]
+    },
+    {
+      "landmarkKey": "contact",
+      "title": "Ridge Signpost [PLACEHOLDER]",
+      "lines": [
+        "[PLACEHOLDER] Leave a message or follow one of the paths below."
+      ],
+      "links": [
+        {
+          "label": "GitHub [PLACEHOLDER]",
+          "url": "https://github.com/example"
+        },
+        {
+          "label": "Email [PLACEHOLDER]",
+          "url": "mailto:hello@example.com"
+        }
+      ]
+    }
+  ]
+}
