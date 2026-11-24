@@ -335,7 +335,8 @@ def fit_and_anchor_bottom_center(
 
 
 def process_hero(hero_dir: Path, out_path: Path, debug_out_path: Path | None = None) -> None:
-    extracted = hero_dir / 'extracted'
+    extracted_v2 = hero_dir / 'extracted-v2'
+    extracted = extracted_v2 if (extracted_v2 / 'metadata.json').exists() else (hero_dir / 'extracted')
     meta_path = extracted / 'metadata.json'
 
     idle_paths: list[Path] = []
@@ -343,10 +344,19 @@ def process_hero(hero_dir: Path, out_path: Path, debug_out_path: Path | None = N
     if meta_path.exists():
         meta = json.loads(meta_path.read_text(encoding='utf-8'))
         anims = meta['states'][0]['frames']['animations']
-        idle_key = next((k for k in anims if 'idle' in k), None)
+        idle_key = (
+            'serene_eyes_closed_idle'
+            if 'serene_eyes_closed_idle' in anims
+            else next((k for k in anims if 'idle' in k), None)
+        )
         walk_key = next((k for k in anims if 'walk' in k), None)
         if idle_key and 'west' in anims[idle_key]:
-            idle_paths = [extracted / rel for rel in anims[idle_key]['west']]
+            raw_idle = [extracted / rel for rel in anims[idle_key]['west']]
+            idle_paths = (
+                [raw_idle[1], raw_idle[2], raw_idle[3], raw_idle[2]]
+                if idle_key == 'serene_eyes_closed_idle' and len(raw_idle) == 4
+                else raw_idle
+            )
         if walk_key and 'west' in anims[walk_key]:
             walk_paths = [extracted / rel for rel in anims[walk_key]['west']]
 
@@ -363,7 +373,43 @@ def process_hero(hero_dir: Path, out_path: Path, debug_out_path: Path | None = N
         arr[binary_a == 0, :3] = 0
         return arr
 
-    idle_frames = [load_binary_frame(p) for p in idle_paths]
+    def shift_frame_int(frame: np.ndarray, dx: int, dy: int) -> np.ndarray:
+        h, w = frame.shape[:2]
+        shifted = np.zeros_like(frame)
+        src_x0 = max(0, -dx)
+        src_x1 = min(w, w - dx)
+        src_y0 = max(0, -dy)
+        src_y1 = min(h, h - dy)
+        dst_x0 = max(0, dx)
+        dst_y0 = max(0, dy)
+        shifted[dst_y0 : dst_y0 + (src_y1 - src_y0), dst_x0 : dst_x0 + (src_x1 - src_x0)] = frame[
+            src_y0:src_y1, src_x0:src_x1
+        ]
+        return shifted
+
+    def compose_wind_idle(base_frame: np.ndarray, wind_frame: np.ndarray) -> np.ndarray:
+        out = base_frame.copy()
+        h, w = out.shape[:2]
+        ys, xs = np.mgrid[0:h, 0:w]
+        # Lock head/crown/face/eyes/torso/hands/boots to base; animate only trailing hair & back hem
+        wind_mask = ((xs >= 48) & (ys >= 22) & (ys <= 58)) | ((xs >= 46) & (ys >= 50) & (ys <= 62))
+        out[wind_mask] = wind_frame[wind_mask]
+        return out
+
+    if idle_key == 'serene_eyes_closed_idle' and len(raw_idle) == 4:
+        base_f1 = load_binary_frame(raw_idle[1])
+        aligned_f2 = shift_frame_int(load_binary_frame(raw_idle[2]), dx=1, dy=-1)
+        aligned_f3 = shift_frame_int(load_binary_frame(raw_idle[3]), dx=1, dy=-1)
+        idle_frames = [
+            base_f1,
+            compose_wind_idle(base_f1, aligned_f2),
+            compose_wind_idle(base_f1, aligned_f3),
+            compose_wind_idle(base_f1, aligned_f2),
+        ]
+        stationary_body_x_limit = 46
+    else:
+        idle_frames = [load_binary_frame(p) for p in idle_paths]
+        stationary_body_x_limit = None
     walk_frames = [load_binary_frame(p) for p in walk_paths]
 
     # Use idle frame 0 as spatial reference for torso/foot alignment
@@ -436,12 +482,27 @@ def process_hero(hero_dir: Path, out_path: Path, debug_out_path: Path | None = N
         assert np.all(sheet[:, x_base + stride - gutter : x_base + stride, 3] == 0), 'Right gutter not empty'
 
     # Assert idle frames' lowest opaque foot pixel sits at row 59 inside 64x64 (footPivotY=4)
+    idle_boxes: list[np.ndarray] = []
     for col in range(4):
         oy = gutter
         ox = col * stride + gutter
         box = sheet[oy : oy + frame_size, ox : ox + frame_size]
         ys = np.where(box[..., 3] > 0)[0]
         assert int(ys.max()) == 59, f'Idle frame {col} lowest pixel y={ys.max()} != 59'
+        idle_boxes.append(box)
+
+    if stationary_body_x_limit is not None:
+        cut_cell_x = stationary_body_x_limit + shift_x_base
+        for col in range(1, 4):
+            assert np.array_equal(
+                idle_boxes[col][:, :cut_cell_x],
+                idle_boxes[0][:, :cut_cell_x],
+            ), f'Idle frame {col} moved inside stationary body region x < {cut_cell_x}!'
+        diff_01 = int(np.any(idle_boxes[1] != idle_boxes[0], axis=-1).sum())
+        diff_12 = int(np.any(idle_boxes[2] != idle_boxes[1], axis=-1).sum())
+        assert diff_01 >= 35 and diff_12 >= 35, (
+            f'Idle hair/hem wind motion too subtle: diff_01={diff_01}, diff_12={diff_12}'
+        )
 
     save_rgba(sheet, out_path)
     if debug_out_path is not None:
@@ -592,39 +653,139 @@ def place_in_master_slot(
     return resized, px, py, new_w, new_h
 
 
-def process_citadel(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[dict[str, float], int]:
-    raw = load_rgba(raw_path)
-    # Dark slate background (#18202c) — flood outer sky and only clear tiny enclosed bridge arches above rock level
-    matted = extract_bg_matte(
-        raw,
-        lo_dist=15.0,
-        hi_dist=50.0,
+def grade_atmospheric_depth(
+    rgba: np.ndarray,
+    lift_floor: float,
+    mist_rgb: tuple[float, float, float],
+    mist_bottom: float,
+    mist_top: float,
+) -> np.ndarray:
+    """
+    Soften dark pixel outlines into atmospheric slate shadows and apply a
+    vertical aerial-perspective mist ramp so backdrop plates recede naturally.
+    """
+    out = rgba.copy()
+    rgb = out[..., :3].astype(np.float32)
+    h = out.shape[0]
+    lum = 0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]
+
+    # Lift near-black lineart floor smoothly toward cool slate shadow
+    shadow_target = np.array([mist_rgb[0] * 0.42, mist_rgb[1] * 0.44, mist_rgb[2] * 0.48], dtype=np.float32)
+    floor_t = np.clip((lift_floor - lum) / max(1.0, lift_floor), 0.0, 1.0)[..., None] * 0.72
+    rgb = rgb * (1.0 - floor_t) + shadow_target[None, None, :] * floor_t
+
+    # Vertical atmospheric mist (stronger at valley base, lighter at upper spires)
+    y_norm = np.linspace(0.0, 1.0, h, dtype=np.float32)[:, None, None]
+    mist_t = mist_top + (mist_bottom - mist_top) * np.power(y_norm, 1.35)
+    mist_vec = np.array(mist_rgb, dtype=np.float32)[None, None, :]
+    rgb = rgb * (1.0 - mist_t) + mist_vec * mist_t
+
+    out[..., :3] = np.clip(np.round(rgb), 0, 255).astype(np.uint8)
+    return out
+
+
+def process_citadel(
+    main_raw_path: Path,
+    hills_raw_path: Path | None,
+    out_path: Path,
+    quality: int = 86,
+) -> tuple[dict[str, float], int]:
+    # Front-left silver-white marble citadel
+    main_raw = load_rgba(main_raw_path)
+    main_matted = extract_bg_matte(
+        main_raw,
+        lo_dist=14.0,
+        hi_dist=44.0,
         border_flood=True,
         clear_interior_dist=0.0,
         decontaminate=True,
     )
-    rgb = raw[..., :3].astype(np.float32)
+    rgb = main_raw[..., :3].astype(np.float32)
     bg_rgb = sample_border_bg(rgb, pad=6)
     dist = np.linalg.norm(rgb - bg_rgb[None, None, :], axis=-1)
-    sky_arches = (np.arange(raw.shape[0])[:, None] < int(raw.shape[0] * 0.72)) & (dist <= 10.0)
-    matted[sky_arches, 3] = 0
-    matted = remove_small_islands(matted, min_pixels=500, alpha_thresh=20)
-    placed, cx, cy, cw, ch = place_in_master_slot(
-        matted,
-        slot_x0=320,
-        slot_y0=320,
-        slot_x1=1580,
+    sky_arches = (np.arange(main_raw.shape[0])[:, None] < int(main_raw.shape[0] * 0.72)) & (dist <= 10.0)
+    main_matted[sky_arches, 3] = 0
+    main_matted = remove_small_islands(main_matted, min_pixels=400, alpha_thresh=20)
+    main_matted = grade_atmospheric_depth(
+        main_matted,
+        lift_floor=68.0,
+        mist_rgb=(220.0, 224.0, 226.0),
+        mist_bottom=0.38,
+        mist_top=0.14,
+    )
+
+    main_placed, mx, my, mw, mh = place_in_master_slot(
+        main_matted,
+        slot_x0=180,
+        slot_y0=280,
+        slot_x1=1460,
         slot_y1=1480,
         align_x='left',
         align_y='bottom',
     )
-    # Gentle atmospheric smoothing on upscaled Pixen plate
+
+    if hills_raw_path is not None and hills_raw_path.exists():
+        hills_raw = load_rgba(hills_raw_path)
+        hills_matted = extract_bg_matte(
+            hills_raw,
+            lo_dist=14.0,
+            hi_dist=44.0,
+            border_flood=True,
+            clear_interior_dist=0.0,
+            decontaminate=True,
+        )
+        hills_matted = remove_small_islands(hills_matted, min_pixels=400, alpha_thresh=20)
+        hills_matted = grade_atmospheric_depth(
+            hills_matted,
+            lift_floor=78.0,
+            mist_rgb=(218.0, 222.0, 224.0),
+            mist_bottom=0.58,
+            mist_top=0.34,
+        )
+        hills_placed, hx, hy, hw, hh = place_in_master_slot(
+            hills_matted,
+            slot_x0=600,
+            slot_y0=680,
+            slot_x1=1980,
+            slot_y1=1490,
+            align_x='right',
+            align_y='bottom',
+        )
+        hills_placed = apply_edge_fade(hills_placed, left_frac=0.12, right_frac=0.14, bottom_frac=0.16)
+
+        comp_x0 = min(mx, hx)
+        comp_y0 = min(my, hy)
+        comp_x1 = max(mx + mw, hx + hw)
+        comp_y1 = max(my + mh, hy + hh)
+        comp_w = comp_x1 - comp_x0
+        comp_h = comp_y1 - comp_y0
+        composite = np.zeros((comp_h, comp_w, 4), dtype=np.uint8)
+
+        # Back valley hills + distant keep
+        alpha_composite_over(composite, hills_placed, hx - comp_x0, hy - comp_y0)
+
+        # Subtle wispy pearl mist veil separating valley hills from foreground citadel cliffs
+        veil = np.zeros((comp_h, comp_w, 4), dtype=np.uint8)
+        y_v = np.linspace(0.0, 1.0, comp_h, dtype=np.float32)[:, None]
+        veil_a = np.clip((y_v - 0.35) / 0.65, 0.0, 1.0) * 68.0
+        veil[..., 0] = 224
+        veil[..., 1] = 227
+        veil[..., 2] = 228
+        veil[..., 3] = np.round(veil_a).astype(np.uint8)
+        alpha_composite_over(composite, veil, 0, 0)
+
+        # Front silver-white marble citadel (feather right edge before over-compositing onto valley hills)
+        main_feathered = apply_edge_fade(main_placed, right_frac=0.15)
+        alpha_composite_over(composite, main_feathered, mx - comp_x0, my - comp_y0)
+        placed, cx, cy = composite, comp_x0, comp_y0
+    else:
+        placed, cx, cy = main_placed, mx, my
+
     placed = np.array(
-        Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.6)),
+        Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.55)),
         dtype=np.uint8,
     )
-    placed = apply_edge_fade(placed, left_frac=0.10, right_frac=0.08, bottom_frac=0.15)
-    # Tight trim after fading while tracking master coordinates
+    placed = apply_edge_fade(placed, left_frac=0.08, right_frac=0.14, bottom_frac=0.16)
     tx0, ty0, tx1, ty1 = alpha_bbox(placed, thresh=4)
     trimmed = placed[ty0:ty1, tx0:tx1]
     trimmed = bleed_rgb_into_transparent(trimmed, passes=16, alpha_thresh=16)
@@ -638,12 +799,12 @@ def process_ghost_castle(raw_path: Path, out_path: Path, quality: int = 86) -> t
     rgb = raw[..., :3].astype(np.float32)
     lum = 0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]
 
-    # Map luminance smoothly to misty pearl-grey mirage: sky/dark wisps fade to 0 while stone spires stay intact
-    lum_norm = np.clip((lum - 48.0) / 135.0, 0.0, 1.0)
-    alpha = np.power(lum_norm, 0.85) * 0.72
+    # Map luminance smoothly to luminous misty pearl-grey mirage: sky/dark wisps fade to 0 while spires stay intact
+    lum_norm = np.clip((lum - 46.0) / 138.0, 0.0, 1.0)
+    alpha = np.power(lum_norm, 0.82) * 0.68
 
-    shadow_mist = np.array([196.0, 202.0, 212.0], dtype=np.float32)[None, None, :]
-    light_mist = np.array([232.0, 234.0, 238.0], dtype=np.float32)[None, None, :]
+    shadow_mist = np.array([200.0, 206.0, 216.0], dtype=np.float32)[None, None, :]
+    light_mist = np.array([240.0, 238.0, 230.0], dtype=np.float32)[None, None, :]
     clean_rgb = shadow_mist * (1.0 - lum_norm[..., None]) + light_mist * lum_norm[..., None]
 
     matted = np.empty_like(raw)
@@ -652,15 +813,15 @@ def process_ghost_castle(raw_path: Path, out_path: Path, quality: int = 86) -> t
 
     placed, cx, cy, cw, ch = place_in_master_slot(
         matted,
-        slot_x0=2120,
-        slot_y0=500,
-        slot_x1=2680,
-        slot_y1=1160,
+        slot_x0=1960,
+        slot_y0=480,
+        slot_x1=2760,
+        slot_y1=1180,
         align_x='center',
         align_y='bottom',
     )
     placed = np.array(
-        Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=1.1)),
+        Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.9)),
         dtype=np.uint8,
     )
     placed = apply_edge_fade(placed, left_frac=0.18, right_frac=0.18, top_frac=0.12, bottom_frac=0.24)
@@ -699,6 +860,13 @@ def process_watchtower(raw_path: Path, out_path: Path, quality: int = 86) -> tup
     matted[..., :3] = np.clip(np.round(out_rgb), 0, 255).astype(np.uint8)
     matted[..., 3] = np.clip(np.round(alpha * 255.0), 0, 255).astype(np.uint8)
     matted = remove_small_islands(matted, min_pixels=300, alpha_thresh=20)
+    matted = grade_atmospheric_depth(
+        matted,
+        lift_floor=72.0,
+        mist_rgb=(218.0, 219.0, 213.0),
+        mist_bottom=0.38,
+        mist_top=0.18,
+    )
 
     placed, cx, cy, cw, ch = place_in_master_slot(
         matted,
@@ -710,7 +878,7 @@ def process_watchtower(raw_path: Path, out_path: Path, quality: int = 86) -> tup
         align_y='bottom',
     )
     placed = np.array(
-        Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.5)),
+        Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.55)),
         dtype=np.uint8,
     )
     placed = apply_edge_fade(placed, left_frac=0.08, right_frac=0.04, bottom_frac=0.16)
@@ -722,54 +890,69 @@ def process_watchtower(raw_path: Path, out_path: Path, quality: int = 86) -> tup
     return placement, byte_size
 
 
-def process_clouds(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[int, float]:
+def _build_seamless_cloud_layer(
+    raw_path: Path,
+    out_path: Path,
+    quality: int,
+    blur_radius: float,
+    lum_gamma: float,
+    opacity_scale: float,
+    shadow_rgb: tuple[float, float, float],
+    highlight_rgb: tuple[float, float, float],
+    sculpt_canyon_rim: bool,
+) -> tuple[int, float]:
     target_w, target_h = 2048, 384
     overlap = 360
     src_w = target_w + overlap
 
     raw_src = load_rgba(raw_path)
     bg_src = sample_border_bg(raw_src[..., :3].astype(np.float32), pad=6).astype(np.uint8)
-    raw_src[286:, :, :3] = bg_src[None, None, :]
+    if raw_path.name == 'clouds-raw.png':
+        raw_src[286:, :, :3] = bg_src[None, None, :]
     raw_img = (
         Image.fromarray(raw_src, mode='RGBA')
         .resize((src_w, target_h), Image.Resampling.LANCZOS)
-        .filter(ImageFilter.GaussianBlur(radius=2.0))
+        .filter(ImageFilter.GaussianBlur(radius=blur_radius))
     )
     raw = np.array(raw_img, dtype=np.uint8)
     rgb = raw[..., :3].astype(np.float32)
 
-    # Extract smooth overcast cloud alpha from dark navy background
     bg_rgb = sample_border_bg(rgb, pad=6)
     dist = np.linalg.norm(rgb - bg_rgb[None, None, :], axis=-1)
     lum = 0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]
     bg_lum = float(0.299 * bg_rgb[0] + 0.587 * bg_rgb[1] + 0.114 * bg_rgb[2])
 
-    lum_norm = np.clip((lum - bg_lum - 10.0) / max(40.0, 225.0 - bg_lum), 0.0, 1.0)
-    dist_norm = np.clip((dist - 16.0) / 135.0, 0.0, 1.0)
-    alpha = np.power(np.maximum(lum_norm, dist_norm * 0.85), 0.82)
+    lum_norm = np.clip((lum - bg_lum - 8.0) / max(40.0, 218.0 - bg_lum), 0.0, 1.0)
+    dist_norm = np.clip((dist - 12.0) / 110.0, 0.0, 1.0)
+    alpha = np.power(np.maximum(lum_norm, dist_norm * 0.92), lum_gamma) * opacity_scale
 
-    # Remap cloud colors cleanly to creamy pearl-ivory / misty slate without dark bg spill
-    shadow_col = np.array([198.0, 202.0, 208.0], dtype=np.float32)[None, None, :]
-    highlight_col = np.array([244.0, 241.0, 230.0], dtype=np.float32)[None, None, :]
+    shadow_col = np.array(shadow_rgb, dtype=np.float32)[None, None, :]
+    highlight_col = np.array(highlight_rgb, dtype=np.float32)[None, None, :]
     shade_t = np.clip(lum_norm * 1.15, 0.0, 1.0)[..., None]
     clean_rgb = shadow_col * (1.0 - shade_t) + highlight_col * shade_t
 
-    # Feather top & bottom borders smoothly to zero
     y_norm = np.linspace(0.0, 1.0, target_h, dtype=np.float32)[:, None]
-    top_fade = np.clip(y_norm / 0.22, 0.0, 1.0)
-    bot_fade = np.clip((1.0 - y_norm) / 0.22, 0.0, 1.0)
-    vert_env = (0.5 - 0.5 * np.cos(np.pi * top_fade)) * (0.5 - 0.5 * np.cos(np.pi * bot_fade))
+    if sculpt_canyon_rim:
+        # Keep upper 28..42% open with periodic wave so citadel, aqueduct & hills show clearly above canyon mist
+        u_wave = np.linspace(0.0, 1.0, src_w, dtype=np.float32)[None, :]
+        top_start = 0.24 + 0.16 * (0.5 - 0.5 * np.cos(2.0 * math.pi * u_wave))
+        top_fade = np.clip((y_norm - top_start) / 0.28, 0.0, 1.0)
+        bot_fade = np.clip((1.0 - y_norm) / 0.24, 0.0, 1.0)
+    else:
+        top_fade = np.clip(y_norm / 0.18, 0.0, 1.0)
+        bot_fade = np.clip((1.0 - y_norm) / 0.18, 0.0, 1.0)
+    vert_env = (0.5 - 0.5 * np.cos(math.pi * top_fade)) * (0.5 - 0.5 * np.cos(math.pi * bot_fade))
     alpha = alpha * vert_env
 
     rgba = np.empty((target_h, src_w, 4), dtype=np.float32)
     rgba[..., :3] = clean_rgb
     rgba[..., 3] = alpha
 
-    # Make horizontally tileable (exact target_w x target_h) via premultiplied overlap blend
+    # Horizontally tileable premultiplied-alpha overlap blend
     core = rgba[:, :target_w, :].copy()
     tail = rgba[:, target_w:, :]
     xs = np.linspace(0.0, 1.0, overlap, dtype=np.float32)[None, :, None]
-    w_core = 0.5 - 0.5 * np.cos(np.pi * xs)
+    w_core = 0.5 - 0.5 * np.cos(math.pi * xs)
     w_tail = 1.0 - w_core
 
     a_core = core[:, :overlap, 3:4]
@@ -785,19 +968,45 @@ def process_clouds(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[i
         np.clip(np.round(core[..., :3]), 0, 255),
         np.clip(np.round(core[..., 3] * 255.0), 0, 255),
     ]).astype(np.uint8)
-    # Periodic horizontal wrap padding so RGB bleed is also horizontally seamless
     pad_x = 16
     wrapped = np.concatenate([out_u8[:, -pad_x:, :], out_u8, out_u8[:, :pad_x, :]], axis=1)
     wrapped = bleed_rgb_into_transparent(wrapped, passes=12, alpha_thresh=12)
     out_u8 = wrapped[:, pad_x:-pad_x, :]
     byte_size = encode_webp(out_u8, out_path, quality=quality, alpha_q=95)
 
-    # Verify horizontal seamlessness on the DECODED WebP file!
     decoded = load_rgba(out_path).astype(np.float32)
     seam_diff = float(np.mean(np.abs(decoded[:, 0, :] - decoded[:, -1, :])))
     if seam_diff >= 4.0:
-        raise RuntimeError(f'clouds.webp seam diff {seam_diff:.2f} >= 4.0!')
+        raise RuntimeError(f'{out_path.name} seam diff {seam_diff:.2f} >= 4.0!')
     return byte_size, seam_diff
+
+
+def process_clouds(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[int, float]:
+    return _build_seamless_cloud_layer(
+        raw_path=raw_path,
+        out_path=out_path,
+        quality=quality,
+        blur_radius=1.7,
+        lum_gamma=0.70,
+        opacity_scale=0.88,
+        shadow_rgb=(218.0, 221.0, 226.0),
+        highlight_rgb=(248.0, 246.0, 238.0),
+        sculpt_canyon_rim=True,
+    )
+
+
+def process_cloud_wisps(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[int, float]:
+    return _build_seamless_cloud_layer(
+        raw_path=raw_path,
+        out_path=out_path,
+        quality=quality,
+        blur_radius=1.6,
+        lum_gamma=0.72,
+        opacity_scale=0.95,
+        shadow_rgb=(222.0, 225.0, 230.0),
+        highlight_rgb=(249.0, 247.0, 240.0),
+        sculpt_canyon_rim=False,
+    )
 
 
 def extract_quadrant_sprites(raw_path: Path, bg_mode: str) -> list[np.ndarray]:
@@ -1025,17 +1234,37 @@ def main() -> int:
     process_foliage_atlas(bells_raw, out / 'foliage' / 'lily-bells.png', bg_mode='dark')
 
     # C. Backdrop & Foreground WebP Plates (with automatic quality step-down if >= 2.5 MB)
-    citadel_raw = find_raw_file(inp / 'backdrop', 'citadel-raw')
-    ghost_raw = find_raw_file(inp / 'backdrop', 'ghost-castle-raw')
-    watchtower_raw = find_raw_file(inp / 'backdrop', 'watchtower-raw')
-    clouds_raw = find_raw_file(inp / 'backdrop', 'clouds-raw')
+    backdrop_dir = inp / 'backdrop'
+    citadel_main_raw = (
+        backdrop_dir / 'citadel-main-raw.png'
+        if (backdrop_dir / 'citadel-main-raw.png').exists()
+        else find_raw_file(backdrop_dir, 'citadel-raw')
+    )
+    citadel_hills_raw = (
+        backdrop_dir / 'citadel-hills-raw.png'
+        if (backdrop_dir / 'citadel-hills-raw.png').exists()
+        else None
+    )
+    ghost_raw = (
+        backdrop_dir / 'ghost-castle-vista-raw.png'
+        if (backdrop_dir / 'ghost-castle-vista-raw.png').exists()
+        else find_raw_file(backdrop_dir, 'ghost-castle-raw')
+    )
+    watchtower_raw = find_raw_file(backdrop_dir, 'watchtower-raw')
+    clouds_raw = (
+        backdrop_dir / 'clouds-rich-raw.png'
+        if (backdrop_dir / 'clouds-rich-raw.png').exists()
+        else find_raw_file(backdrop_dir, 'clouds-raw')
+    )
+    cloud_wisps_raw = find_raw_file(backdrop_dir, 'cloud-wisps-raw')
 
     placements: dict[str, dict[str, float]] = {}
     plate_sizes: dict[str, int] = {}
     seam_diff = 0.0
+    wisps_seam_diff = 0.0
     for quality in (86, 78):
         placements['citadel'], plate_sizes['citadel.webp'] = process_citadel(
-            citadel_raw, out / 'backdrop' / 'citadel.webp', quality=quality
+            citadel_main_raw, citadel_hills_raw, out / 'backdrop' / 'citadel.webp', quality=quality
         )
         placements['ghostCastle'], plate_sizes['ghost-castle.webp'] = process_ghost_castle(
             ghost_raw, out / 'backdrop' / 'ghost-castle.webp', quality=quality
@@ -1045,6 +1274,9 @@ def main() -> int:
         )
         plate_sizes['clouds.webp'], seam_diff = process_clouds(
             clouds_raw, out / 'backdrop' / 'clouds.webp', quality=quality
+        )
+        plate_sizes['cloud-wisps.webp'], wisps_seam_diff = process_cloud_wisps(
+            cloud_wisps_raw, out / 'backdrop' / 'cloud-wisps.webp', quality=quality
         )
         plate_sizes['foreground-lip.webp'] = process_foreground_lip(
             leaves_raw, bells_raw, out / 'backdrop' / 'foreground-lip.webp', quality=quality
@@ -1093,6 +1325,7 @@ def main() -> int:
         'backdrop/ghost-castle.webp',
         'backdrop/watchtower.webp',
         'backdrop/clouds.webp',
+        'backdrop/cloud-wisps.webp',
         'backdrop/foreground-lip.webp',
         'landmarks/about.png',
         'landmarks/works.png',
@@ -1104,7 +1337,7 @@ def main() -> int:
         print(f'  {rel:34s} {w:4d}x{h:<4d}  {p.stat().st_size:8d} bytes')
 
     print(f'\nTotal WebP backdrop payload: {total_webp / 1024:.1f} KB / {MAX_BACKDROP_WEBP_BYTES / 1024:.0f} KB budget')
-    print(f'clouds.webp vertical seam delta (RGBA mean abs): {seam_diff:.3f}')
+    print(f'clouds.webp seam delta: {seam_diff:.3f} | cloud-wisps.webp seam delta: {wisps_seam_diff:.3f}')
     print('\nManifest cropPixelsToManifest values:')
     print(json.dumps(placements, indent=2))
     return 0

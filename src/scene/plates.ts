@@ -23,17 +23,89 @@ export interface PlatesController {
   dispose: () => void;
 }
 
+interface CloudDriftParams {
+  driftSpeed: number;
+  uvScale: number;
+  uvPhase: number;
+  opacity: number;
+}
+
+const PLATE_RENDER_ORDER: Record<PlateKey, number> = {
+  ghostCastle: -7,
+  citadel: -6,
+  watchtower: -4,
+  clouds: -3,
+  foregroundLip: 10,
+};
+
+interface DepthCloudLayerSpec extends CloudDriftParams {
+  id: string;
+  z: number;
+  renderOrder: number;
+  parallax: number;
+  worldWidth: number;
+  worldHeight: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+const DEPTH_CLOUD_LAYERS: readonly DepthCloudLayerSpec[] = [
+  {
+    id: 'cloudsFar',
+    z: -72,
+    renderOrder: -8,
+    parallax: 0.9,
+    worldWidth: 156,
+    worldHeight: 24,
+    offsetX: 0,
+    offsetY: 9.2,
+    driftSpeed: 0.005,
+    uvScale: 2.0,
+    uvPhase: 0.15,
+    opacity: 0.56,
+  },
+  {
+    id: 'cloudsMid',
+    z: -45,
+    renderOrder: -5,
+    parallax: 0.68,
+    worldWidth: 116,
+    worldHeight: 18,
+    offsetX: 0,
+    offsetY: 2.2,
+    driftSpeed: 0.011,
+    uvScale: 1.6,
+    uvPhase: 0.52,
+    opacity: 0.68,
+  },
+  {
+    id: 'cloudsNear',
+    z: -8.5,
+    renderOrder: -2,
+    parallax: 0.22,
+    worldWidth: 72,
+    worldHeight: 10,
+    offsetX: 0,
+    offsetY: 0.5,
+    driftSpeed: 0.028,
+    uvScale: 1.4,
+    uvPhase: 0.83,
+    opacity: 0.46,
+  },
+];
+
 function createPlateMaterial(
   map: THREE.Texture,
   fogMix: number,
-  debugKey: PlateKey,
+  layerId: string,
   windUniforms: WindUniforms,
+  cloudParams?: CloudDriftParams,
 ): { material: THREE.MeshBasicMaterial; setMap: (tex: THREE.Texture) => void } {
-  const useFog = fogMix > 0;
-  const isDriftCloud = debugKey === 'clouds';
+  const useFog = fogMix > 0 && !cloudParams;
   const material = new THREE.MeshBasicMaterial({
     map,
     transparent: true,
+    opacity: cloudParams ? cloudParams.opacity : 1.0,
     depthWrite: false,
     fog: useFog,
   });
@@ -55,21 +127,27 @@ function createPlateMaterial(
           #endif`,
         );
     };
-    material.customProgramCacheKey = () => `plate-fog-mix-${debugKey}`;
-  } else if (isDriftCloud) {
+    material.customProgramCacheKey = () => `plate-fog-mix-${layerId}`;
+  } else if (cloudParams) {
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uDriftOffset = windUniforms.uDriftOffset;
+      shader.uniforms.uDriftSpeed = { value: cloudParams.driftSpeed };
+      shader.uniforms.uUvScale = { value: cloudParams.uvScale };
+      shader.uniforms.uUvPhase = { value: cloudParams.uvPhase };
       shader.vertexShader =
-        'uniform float uDriftOffset;\n' +
+        `uniform float uDriftOffset;
+        uniform float uDriftSpeed;
+        uniform float uUvScale;
+        uniform float uUvPhase;\n` +
         shader.vertexShader.replace(
           '#include <uv_vertex>',
           `#include <uv_vertex>
           #ifdef USE_MAP
-            vMapUv.x += uDriftOffset * 0.015;
+            vMapUv.x = vMapUv.x * uUvScale - uDriftOffset * uDriftSpeed + uUvPhase;
           #endif`,
         );
     };
-    material.customProgramCacheKey = () => 'cloud-drift';
+    material.customProgramCacheKey = () => `cloud-drift-${layerId}`;
   }
 
   return {
@@ -92,7 +170,8 @@ export function createPlatesController(
   group.add(guidesGroup);
 
   const plateMeshes: Array<{
-    key: PlateKey;
+    offsetX: number;
+    parallax: number;
     mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
     currentTexture: THREE.Texture;
     dispose: () => void;
@@ -103,17 +182,26 @@ export function createPlatesController(
     const spec = ASSET_MANIFEST.plates[key];
     const geometry = new THREE.PlaneGeometry(spec.worldWidth, spec.worldHeight);
     const placeholder = createPlatePlaceholderTexture(key, spec);
-    const { material, setMap } = createPlateMaterial(placeholder, spec.fogMix, key, windUniforms);
+    const cloudParams: CloudDriftParams | undefined =
+      key === 'clouds'
+        ? { driftSpeed: 0.016, uvScale: 1.0, uvPhase: 0.0, opacity: 0.88 }
+        : undefined;
+    const { material, setMap } = createPlateMaterial(
+      placeholder,
+      spec.fogMix,
+      key,
+      windUniforms,
+      cloudParams,
+    );
     const mesh = new THREE.Mesh(geometry, material);
 
     mesh.position.set(spec.offsetX, spec.offsetY, spec.z);
-    if (key === 'foregroundLip') {
-      mesh.renderOrder = 10;
-    }
+    mesh.renderOrder = PLATE_RENDER_ORDER[key];
     group.add(mesh);
 
     const plateRecord = {
-      key,
+      offsetX: spec.offsetX,
+      parallax: spec.parallax,
       mesh,
       currentTexture: placeholder as THREE.Texture,
       dispose() {
@@ -147,6 +235,53 @@ export function createPlatesController(
     guidesGroup.add(wireframe);
   }
 
+  // Interleaved depth cloud layers weaving behind castles, across valley, and behind meadow crest
+  const baseCloudsSpec = ASSET_MANIFEST.plates.clouds;
+  for (const layer of DEPTH_CLOUD_LAYERS) {
+    const geometry = new THREE.PlaneGeometry(layer.worldWidth, layer.worldHeight);
+    const placeholder = createPlatePlaceholderTexture('clouds', {
+      ...baseCloudsSpec,
+      worldWidth: layer.worldWidth,
+      worldHeight: layer.worldHeight,
+    });
+    const { material, setMap } = createPlateMaterial(
+      placeholder,
+      0,
+      layer.id,
+      windUniforms,
+      layer,
+    );
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(layer.offsetX, layer.offsetY, layer.z);
+    mesh.renderOrder = layer.renderOrder;
+    group.add(mesh);
+
+    const layerRecord = {
+      offsetX: layer.offsetX,
+      parallax: layer.parallax,
+      mesh,
+      currentTexture: placeholder as THREE.Texture,
+      dispose() {
+        geometry.dispose();
+        layerRecord.currentTexture.dispose();
+        material.dispose();
+      },
+    };
+    plateMeshes.push(layerRecord);
+
+    loadTextureWithPlaceholder({
+      key: layer.id,
+      primaryPath: 'assets/backdrop/cloud-wisps.webp',
+      placeholder,
+      diag,
+      tileX: true,
+      onApplied(tex) {
+        layerRecord.currentTexture = tex;
+        setMap(tex);
+      },
+    });
+  }
+
   // HORIZON_Y world guideline and 4:3 safe-area framing box at z = 0
   const frustumH0 = 2 * Math.tan((BASE_FOV * Math.PI) / 360) * BASE_CAMERA_Z;
   const horizonWorldY = BASE_TARGET_Y - (0.5 - HORIZON_Y) * frustumH0;
@@ -177,8 +312,7 @@ export function createPlatesController(
     },
     update(cameraX) {
       for (const item of plateMeshes) {
-        const spec = ASSET_MANIFEST.plates[item.key];
-        item.mesh.position.x = spec.offsetX + cameraX * spec.parallax;
+        item.mesh.position.x = item.offsetX + cameraX * item.parallax;
       }
       for (const child of guidesGroup.children) {
         if (child instanceof THREE.LineSegments && child.userData.key) {

@@ -46,25 +46,31 @@ float skyFbm(vec2 p) {
 void main() {
   float y = clamp(vSkyUv.y, 0.0, 1.0);
 
-  vec3 cUpper = vec3(0.824, 0.808, 0.761);   // #d2cec2 overcast warm grey-beige
+  vec3 cUpper = vec3(0.816, 0.796, 0.753);   // #d0cbc0 overcast warm grey-beige
   vec3 cMid = vec3(0.902, 0.886, 0.843);     // #e6e2d7 warm pearl mid-sky
-  vec3 cMistBand = vec3(0.949, 0.937, 0.894); // #f2efe4 luminous horizon mist
+  vec3 cMistBand = vec3(0.957, 0.945, 0.902); // #f4f1e6 luminous valley horizon mist
   vec3 cHaze = vec3(0.788, 0.808, 0.839);    // #c9ced6 muted overcast horizon haze
 
   vec3 col = mix(cHaze, cMistBand, smoothstep(0.18, 0.42, y));
   col = mix(col, cMid, smoothstep(0.42, 0.70, y));
   col = mix(col, cUpper, smoothstep(0.70, 0.98, y));
 
-  // Subtle diagonal overcast cloud streaks inspired by the reference sky
-  vec2 streakUv = vec2(vSkyUv.x * 2.2 + vSkyUv.y * 1.15, vSkyUv.y * 3.8 - vSkyUv.x * 0.45);
-  float streak = skyFbm(streakUv * 2.4);
-  float upperMask = smoothstep(0.32, 0.85, y) * (1.0 - smoothstep(0.92, 1.0, y));
-  col = mix(col, cUpper * 0.96, streak * 0.22 * upperMask);
+  // Sweeping painterly diagonal overcast cloud strata (upper-right toward lower-left)
+  vec2 streakUv = vec2(vSkyUv.x * 2.6 + vSkyUv.y * 1.65, vSkyUv.y * 4.4 - vSkyUv.x * 0.72);
+  float streakPrimary = skyFbm(streakUv * 2.5);
+  float streakFine = skyFbm(streakUv * 5.2 + vec2(3.1, -1.7));
+  float strata = smoothstep(0.26, 0.78, streakPrimary * 0.72 + streakFine * 0.28);
+  float upperMask = smoothstep(0.30, 0.84, y) * (1.0 - smoothstep(0.93, 1.0, y));
+  col = mix(col, cUpper * 0.93, strata * 0.36 * upperMask);
 
-  // Soft radiant center-left overcast glow behind the valley
-  float glowDist = length((vSkyUv - vec2(0.46, 0.48)) * vec2(0.95, 1.5));
-  float centerGlow = smoothstep(0.65, 0.05, glowDist);
-  col = mix(col, cMistBand, centerGlow * 0.28);
+  // Delicate bright overcast wisps catching diffused valley light
+  float wispHighlight = smoothstep(0.56, 0.86, streakFine) * upperMask;
+  col = mix(col, cMistBand, wispHighlight * 0.16);
+
+  // Soft sunlit-pearl radiant valley glow behind the center horizon
+  float glowDist = length((vSkyUv - vec2(0.44, 0.42)) * vec2(0.92, 1.55));
+  float centerGlow = smoothstep(0.72, 0.04, glowDist);
+  col = mix(col, cMistBand, centerGlow * 0.38);
 
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>

@@ -23,16 +23,17 @@
 - **Plates, Crop Anchors & Placeholders:** Single `layout.ts` world-metric contract and typed `manifest.ts` using alpha `.webp` primary plates (`.png` accepted for local testing) with `offsetX`, `offsetY`, `worldWidth`, and `worldHeight` crop/placement offsets for tightly cropped `citadel`, `ghostCastle`, and `watchtower` (master-canvas workflow in `public/assets/README.md` + `?debug=1` `horizonY` guideline and cropped-plate wireframe toggle), plus exact-ratio labeled placeholders until final owner art arrives.
 
 ## Asset Status
-- `public/assets/sprites/hero.png` (`408x136`, `68px` stride with `2px` gutters, 4 wind-idle + 6 walk frames, `footPivotY: 4`, binary `{0, 255}` alpha) - Integrated & verified live.
+- `public/assets/sprites/hero.png` (`408x136`, `68px` stride with `2px` gutters, 4 motionless-body closed-eyes wind-idle frames in Row 0 + 6 open-eyes walk frames in Row 1, `footPivotY: 4`, binary `{0, 255}` alpha) - Integrated & verified live.
 - `public/assets/foliage/lily-leaves.png` (`256x256`, `2x2` sage leaf clumps with RGB bleed and smooth alpha ramp) - Integrated & verified live under MSAA `alphaToCoverage`.
 - `public/assets/foliage/lily-bells.png` (`256x256`, `2x2` ivory lily-of-the-valley stems with RGB bleed and smooth alpha ramp) - Integrated & verified live under MSAA `alphaToCoverage`.
-- `public/assets/backdrop/citadel.webp` (`1236x1145`, tight crop synced to `manifest.ts` at `offsetX: -24.275, offsetY: 3.688, worldWidth: 30.9, worldHeight: 28.625`) - Integrated & verified live.
-- `public/assets/backdrop/ghost-castle.webp` (`528x577`, tight crop synced to `manifest.ts` at `offsetX: 12.0, offsetY: 5.263, worldWidth: 13.2, worldHeight: 14.425`) - Integrated & verified live.
-- `public/assets/backdrop/watchtower.webp` (`523x878`, tight crop synced to `manifest.ts` at `offsetX: 19.587, offsetY: 6.775, worldWidth: 13.075, worldHeight: 21.95`) - Integrated & verified live.
-- `public/assets/backdrop/clouds.webp` (`2048x384`, horizontally seamless `tileX: true` with `1.085` RGBA edge delta) - Integrated & verified live.
-- `public/assets/backdrop/foreground-lip.webp` (`2560x320`, composited from high-res lily leaves/bells with bottom bokeh blur, `589.1 KB` total WebP payload across all 5 plates) - Integrated & verified live.
+- `public/assets/backdrop/citadel.webp` (`1746x1193`, 2-layer composited sprawling white Gothic citadel + misty rolling valley hills/aqueduct with atmospheric depth grading, synced to `manifest.ts` at `offsetX: -21.35, offsetY: 4.088, worldWidth: 43.65, worldHeight: 29.825`) - Integrated & verified live.
+- `public/assets/backdrop/ghost-castle.webp` (`770x586`, wider misty pearl-grey castle & mountain ridge skyline synced to `manifest.ts` at `offsetX: 11.0, offsetY: 4.225, worldWidth: 19.25, worldHeight: 14.65`) - Integrated & verified live.
+- `public/assets/backdrop/watchtower.webp` (`523x878`, atmospheric distance-graded mossy stone tower + obelisk synced to `manifest.ts` at `offsetX: 19.587, offsetY: 6.775, worldWidth: 13.075, worldHeight: 21.95`) - Integrated & verified live.
+- `public/assets/backdrop/clouds.webp` (`2048x384`, sculpted canyon-rim cumulus cloud bank, horizontally seamless `tileX: true` with `1.273` RGBA edge delta) - Integrated & verified live.
+- `public/assets/backdrop/cloud-wisps.webp` (`2048x384`, airy scattered cloud puffs with `1.208` RGBA edge delta driving `cloudsFar`, `cloudsMid`, and `cloudsNear` interleaved depth layers in `src/scene/plates.ts`) - Integrated & verified live.
+- `public/assets/backdrop/foreground-lip.webp` (`2560x320`, composited from high-res lily leaves/bells with bottom bokeh blur, `787.3 KB` total WebP payload across all 6 plates) - Integrated & verified live.
 - `public/assets/landmarks/{about,works,interests,contact}.png` (`128x128` bottom-centered RGBA cutouts with moss palette harmonization and RGB edge bleed) - Generated & verified (loaded in Slice 3).
-- `scripts/process-assets.py` - Reusable asset post-processing, QA assertion, and `manifest.ts` crop-sync pipeline.
+- `scripts/process-assets.py` - Reusable asset post-processing, stationary idle body lock, atmospheric depth grading, QA assertion, and `manifest.ts` crop-sync pipeline.
 - `public/assets/audio/theme.mp3` (primary `.mp3`/`.m4a`, optional `.ogg`) - Pending owner licensed track (Slice 3).
 
 ## Planned Vertical Slices

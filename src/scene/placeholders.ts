@@ -373,8 +373,8 @@ export function createFoliagePlaceholderTexture(
 export function createPetalPlaceholderTexture(): THREE.DataTexture {
   const size = 64;
   const data = new Uint8Array(size * size * 4);
-  const cos = Math.cos(0.35);
-  const sin = Math.sin(0.35);
+  const cos = Math.cos(0.42);
+  const sin = Math.sin(0.42);
 
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
@@ -382,14 +382,21 @@ export function createPetalPlaceholderTexture(): THREE.DataTexture {
       const dy = y - 31.5;
       const rx = dx * cos - dy * sin;
       const ry = dx * sin + dy * cos;
-      const dist = Math.hypot(rx / 22, ry / 13);
+
+      // Tapered curved lily-petal silhouette (narrower tip on +rx, cupped slight bend along ry)
+      const u = rx / 24.0;
+      const bend = 2.6 * u * u;
+      const widthAtU = 13.5 * Math.max(0.18, 1.0 - 0.55 * Math.max(0.0, u) - 0.25 * u * u);
+      const dist = Math.hypot(u, (ry - bend) / widthAtU);
       const t = Math.min(1, dist);
 
-      // Warm-ivory RGB kept non-black even at alpha=0 to prevent bilinear edge haloing
-      const r = Math.round(248 - t * 16);
-      const g = Math.round(245 - t * 18);
-      const b = Math.round(236 - t * 21);
-      const a = dist >= 1 ? 0 : Math.round(255 * Math.min(1, (1 - dist) * 2.4));
+      // Luminous warm-ivory core with subtle warm-taupe rim so airborne petals pop cleanly over bright sky
+      const r = Math.round(252 - t * 24);
+      const g = Math.round(250 - t * 27);
+      const b = Math.round(242 - t * 32);
+      const edge = Math.max(0, 1 - dist);
+      const smoothAlpha = edge * edge * (3 - 2 * edge);
+      const a = dist >= 1 ? 0 : Math.round(255 * Math.min(1, smoothAlpha * 2.1));
 
       const idx = (y * size + x) * 4;
       data[idx] = r;
