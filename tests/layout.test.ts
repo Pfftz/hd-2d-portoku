@@ -105,6 +105,7 @@ describe('layout spatial math', () => {
     const towerTop43 = projectScreen(4 / 3, watchtower.z, watchtower.offsetY + watchtower.worldHeight * 0.5);
     expect(towerTop43.yFromBottomPct).toBeGreaterThanOrEqual(85);
     expect(watchtower.z).toBeLessThan(clouds.z);
+    expect(watchtower.offsetX + watchtower.worldWidth * 0.5).toBeGreaterThanOrEqual(30);
   });
 
   it('computes responsive camera framing across 21:9, 4:3, 1:1, and 9:16', () => {

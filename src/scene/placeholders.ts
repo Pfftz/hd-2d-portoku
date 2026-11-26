@@ -1,8 +1,17 @@
 import * as THREE from 'three';
+import { assetLoadTracker } from '../assets/loadTracker.ts';
 import { ASSET_MANIFEST, resolveAssetUrl, type PlateKey, type PlateSpec } from '../assets/manifest.ts';
 import type { LandmarkKey } from './layout.ts';
 
-export type AssetSourceKind = 'webp' | 'png' | 'placeholder';
+export type AssetSourceKind =
+  | 'webp'
+  | 'png'
+  | 'placeholder'
+  | 'opus'
+  | 'mp3'
+  | 'm4a'
+  | 'ogg'
+  | 'wind-only';
 
 export interface DiagRecorder {
   assetSources: Record<string, AssetSourceKind>;
@@ -390,10 +399,10 @@ export function createPetalPlaceholderTexture(): THREE.DataTexture {
       const dist = Math.hypot(u, (ry - bend) / widthAtU);
       const t = Math.min(1, dist);
 
-      // Luminous warm-ivory core with subtle warm-taupe rim so airborne petals pop cleanly over bright sky
-      const r = Math.round(252 - t * 24);
-      const g = Math.round(250 - t * 27);
-      const b = Math.round(242 - t * 32);
+      // Luminous warm-ivory core with subtle warm-parchment backlit rim so airborne petals pop over bright sky & dark foliage
+      const r = Math.round(248 - t * 40);
+      const g = Math.round(244 - t * 44);
+      const b = Math.round(234 - t * 50);
       const edge = Math.max(0, 1 - dist);
       const smoothAlpha = edge * edge * (3 - 2 * edge);
       const a = dist >= 1 ? 0 : Math.round(255 * Math.min(1, smoothAlpha * 2.1));
@@ -406,6 +415,59 @@ export function createPetalPlaceholderTexture(): THREE.DataTexture {
     }
   }
 
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export function createSoftHaloTexture(): THREE.DataTexture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  const center = (size - 1) * 0.5;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const dx = (x - center) / center;
+      const dy = (y - center) / center;
+      const dist = Math.min(1, Math.hypot(dx, dy));
+      const falloff = 1 - dist;
+      const smooth = falloff * falloff * (3 - 2 * falloff);
+      const idx = (y * size + x) * 4;
+      data[idx] = 246;
+      data[idx + 1] = 244;
+      data[idx + 2] = 236;
+      data[idx + 3] = Math.round(255 * smooth * smooth);
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export function createDustMoteTexture(): THREE.DataTexture {
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  const center = (size - 1) * 0.5;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const dx = (x - center) / center;
+      const dy = (y - center) / center;
+      const dist = Math.min(1, Math.hypot(dx, dy));
+      const core = Math.max(0, 1 - dist * 2.1);
+      const halo = Math.max(0, 1 - dist);
+      const alpha = Math.min(1, core * 0.85 + halo * halo * 0.45);
+      const idx = (y * size + x) * 4;
+      data[idx] = 255;
+      data[idx + 1] = 254;
+      data[idx + 2] = 248;
+      data[idx + 3] = Math.round(255 * alpha);
+    }
+  }
   const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.LinearFilter;
@@ -441,12 +503,22 @@ export interface TextureLoadOptions {
   diag: DiagRecorder;
   onApplied: (texture: THREE.Texture, source: AssetSourceKind) => void;
   isSprite?: boolean;
+  nearestFilter?: boolean;
   tileX?: boolean;
 }
 
 export function loadTextureWithPlaceholder(options: TextureLoadOptions): void {
-  const { key, primaryPath, placeholder, diag, onApplied, isSprite = false, tileX = false } =
-    options;
+  const {
+    key,
+    primaryPath,
+    placeholder,
+    diag,
+    onApplied,
+    isSprite = false,
+    nearestFilter = false,
+    tileX = false,
+  } = options;
+  const finishLoad = assetLoadTracker.begin(key);
   diag.assetSources[key] = 'placeholder';
   onApplied(placeholder, 'placeholder');
 
@@ -454,7 +526,7 @@ export function loadTextureWithPlaceholder(options: TextureLoadOptions): void {
 
   const applyLoaded = (loaded: THREE.Texture, source: 'webp' | 'png'): void => {
     loaded.colorSpace = THREE.SRGBColorSpace;
-    if (isSprite) {
+    if (isSprite || nearestFilter) {
       loaded.magFilter = THREE.NearestFilter;
       loaded.minFilter = THREE.NearestFilter;
       loaded.generateMipmaps = false;
@@ -468,6 +540,7 @@ export function loadTextureWithPlaceholder(options: TextureLoadOptions): void {
     diag.recordEvent(`Loaded ${key} (${source})`);
     onApplied(loaded, source);
     placeholder.dispose();
+    finishLoad();
   };
 
   loader.load(
@@ -483,11 +556,13 @@ export function loadTextureWithPlaceholder(options: TextureLoadOptions): void {
           undefined,
           () => {
             diag.recordEvent(`Using placeholder for ${key} (asset not found)`);
+            finishLoad(true);
           },
         );
         return;
       }
       diag.recordEvent(`Using placeholder for ${key} (asset not found)`);
+      finishLoad(true);
     },
   );
 }

@@ -1,17 +1,20 @@
 import * as THREE from 'three';
 import { createMulberry32 } from './foliage.ts';
-import { createPetalPlaceholderTexture } from './placeholders.ts';
+import { createDustMoteTexture, createPetalPlaceholderTexture } from './placeholders.ts';
 import type { WindUniforms } from './shaders/wind.glsl.ts';
 
 export interface PetalsController {
+  group: THREE.Group;
   mesh: THREE.InstancedMesh;
   update: (cameraX: number) => void;
   dispose: () => void;
 }
 
 const PETAL_COUNT = 480;
+const MOTE_COUNT = 220;
 
 export function createPetalsController(windUniforms: WindUniforms): PetalsController {
+  const group = new THREE.Group();
   const geometry = new THREE.PlaneGeometry(0.24, 0.24);
   const seedData = new Float32Array(PETAL_COUNT * 4);
   const styleData = new Float32Array(PETAL_COUNT * 3);
@@ -41,7 +44,7 @@ export function createPetalsController(windUniforms: WindUniforms): PetalsContro
       z = 5.6 + rng() * 6.2;
       sizeScale = 2.2 + rng() * 2.5;
       speedScale = 1.65 + rng() * 0.9;
-      opacity = 0.48 + rng() * 0.3;
+      opacity = 0.52 + rng() * 0.26;
     }
 
     seedData[i * 4] = rng() * 44.0;
@@ -130,8 +133,87 @@ export function createPetalsController(windUniforms: WindUniforms): PetalsContro
     mesh.setMatrixAt(i, identity);
   }
   mesh.instanceMatrix.needsUpdate = true;
+  group.add(mesh);
+
+  // Tiny glowing airborne dust motes catching diffused overcast light
+  const moteGeo = new THREE.PlaneGeometry(0.14, 0.14);
+  const moteSeeds = new Float32Array(MOTE_COUNT * 4);
+  const moteStyles = new Float32Array(MOTE_COUNT * 4);
+  for (let i = 0; i < MOTE_COUNT; i += 1) {
+    moteSeeds[i * 4] = rng() * 40.0;
+    moteSeeds[i * 4 + 1] = rng() * 8.0;
+    moteSeeds[i * 4 + 2] = -9.0 + rng() * 18.5;
+    moteSeeds[i * 4 + 3] = rng() * Math.PI * 2;
+
+    moteStyles[i * 4] = 0.45 + rng() * 0.85;
+    moteStyles[i * 4 + 1] = 0.7 + rng() * 0.75;
+    moteStyles[i * 4 + 2] = 0.42 + rng() * 0.48;
+    moteStyles[i * 4 + 3] = 1.4 + rng() * 2.2;
+  }
+  moteGeo.setAttribute('aMoteSeed', new THREE.InstancedBufferAttribute(moteSeeds, 4));
+  moteGeo.setAttribute('aMoteStyle', new THREE.InstancedBufferAttribute(moteStyles, 4));
+
+  const moteTexture = createDustMoteTexture();
+  const moteMat = new THREE.MeshBasicMaterial({
+    map: moteTexture,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+  });
+
+  moteMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = windUniforms.uTime;
+    shader.uniforms.uWindStrength = windUniforms.uWindStrength;
+    shader.uniforms.uDriftOffset = windUniforms.uDriftOffset;
+    shader.uniforms.uCameraX = cameraXUniform;
+
+    shader.vertexShader =
+      `attribute vec4 aMoteSeed;
+      attribute vec4 aMoteStyle;
+      varying float vMoteAlpha;
+      uniform float uTime;
+      uniform float uWindStrength;
+      uniform float uDriftOffset;
+      uniform float uCameraX;\n` +
+      shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        float phase = aMoteSeed.w;
+        float sizeScale = aMoteStyle.x;
+        float speed = aMoteStyle.y;
+        float baseOpacity = aMoteStyle.z;
+        float shimmerSpeed = aMoteStyle.w;
+        float animTime = uTime * uWindStrength;
+        vMoteAlpha = baseOpacity * (0.45 + 0.55 * sin(animTime * shimmerSpeed + phase));
+        float driftX = uDriftOffset * (1.8 * speed);
+        float liftY = uDriftOffset * (0.65 * speed) + sin(animTime * 1.1 + phase * 1.3) * 0.25;
+        float wx = mod(aMoteSeed.x + driftX - uCameraX + 20.0, 40.0) - 20.0 + uCameraX;
+        float wy = mod(aMoteSeed.y + liftY, 8.0) - 1.2;
+        transformed = vec3(wx, wy, aMoteSeed.z) + transformed * sizeScale;`,
+      );
+
+    shader.fragmentShader =
+      'varying float vMoteAlpha;\n' +
+      shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>
+        gl_FragColor.a *= vMoteAlpha;`,
+      );
+  };
+  moteMat.customProgramCacheKey = () => 'dust-motes-v1';
+
+  const motesMesh = new THREE.InstancedMesh(moteGeo, moteMat, MOTE_COUNT);
+  motesMesh.frustumCulled = false;
+  motesMesh.renderOrder = 13;
+  for (let i = 0; i < MOTE_COUNT; i += 1) {
+    motesMesh.setMatrixAt(i, identity);
+  }
+  motesMesh.instanceMatrix.needsUpdate = true;
+  group.add(motesMesh);
 
   return {
+    group,
     mesh,
     update(cameraX) {
       cameraXUniform.value = cameraX;
@@ -140,6 +222,9 @@ export function createPetalsController(windUniforms: WindUniforms): PetalsContro
       geometry.dispose();
       texture.dispose();
       material.dispose();
+      moteGeo.dispose();
+      moteTexture.dispose();
+      moteMat.dispose();
     },
   };
 }

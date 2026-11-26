@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { AppStateController } from '../state/appState.ts';
 import type { InputRouterHandle } from '../input/inputRouter.ts';
 import { createCameraRig } from './camera.ts';
@@ -28,8 +32,8 @@ export interface SceneControllerDeps {
 export function createSceneController(deps: SceneControllerDeps): SceneController {
   const { rendererHandle, appState, getInputRouter } = deps;
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#ddd8cc');
-  scene.fog = new THREE.FogExp2('#d2d6dc', 0.011);
+  scene.background = new THREE.Color('#f3f1ea');
+  scene.fog = new THREE.FogExp2('#e8e5dc', 0.0042);
 
   const windClock = createWindClock();
   const cameraRig = createCameraRig(window.innerWidth, window.innerHeight);
@@ -50,8 +54,36 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
   scene.add(sky.mesh);
   scene.add(foliage.group);
   scene.add(plates.group);
-  scene.add(hero.mesh);
-  scene.add(petals.mesh);
+  scene.add(hero.group);
+  scene.add(petals.group);
+
+  const renderer = rendererHandle.renderer;
+  const initWidth = Math.max(1, window.visualViewport?.width ?? window.innerWidth);
+  const initHeight = Math.max(1, window.visualViewport?.height ?? window.innerHeight);
+  const targetSamples =
+    renderer.capabilities.isWebGL2 && rendererHandle.activeAlphaTest === 0.3
+      ? Math.min(4, renderer.capabilities.maxSamples)
+      : 0;
+  const renderTarget = new THREE.WebGLRenderTarget(
+    Math.max(1, Math.round(initWidth * renderer.getPixelRatio())),
+    Math.max(1, Math.round(initHeight * renderer.getPixelRatio())),
+    {
+      type: THREE.HalfFloatType,
+      samples: targetSamples,
+    },
+  );
+  const composer = new EffectComposer(renderer, renderTarget);
+  const renderPass = new RenderPass(scene, cameraRig.camera);
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(initWidth, initHeight),
+    0.26,
+    0.4,
+    0.84,
+  );
+  const outputPass = new OutputPass();
+  composer.addPass(renderPass);
+  composer.addPass(bloomPass);
+  composer.addPass(outputPass);
 
   let rafId = 0;
   let lastTimeMs = 0;
@@ -63,8 +95,14 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
     }
     const width = window.visualViewport?.width ?? window.innerWidth;
     const height = window.visualViewport?.height ?? window.innerHeight;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
     rendererHandle.resize(width, height);
     cameraRig.resize(width, height);
+    composer.setPixelRatio(renderer.getPixelRatio());
+    composer.setSize(width, height);
+    bloomPass.resolution.set(width, height);
   };
 
   window.addEventListener('resize', onResize);
@@ -136,9 +174,9 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
     });
 
     const baseCameraX = cameraRig.getBaseCameraX();
-    plates.update(baseCameraX);
+    plates.update(baseCameraX, windClock.uniforms.uTime.value);
     petals.update(baseCameraX);
-    rendererHandle.renderer.render(scene, cameraRig.camera);
+    composer.render();
     rendererHandle.updateDebugReadout({
       heroT: state.heroT,
       guidesVisible: plates.areGuidesVisible(),
@@ -173,6 +211,11 @@ export function createSceneController(deps: SceneControllerDeps): SceneControlle
       foliage.dispose();
       plates.dispose();
       sky.dispose();
+      renderPass.dispose();
+      bloomPass.dispose();
+      outputPass.dispose();
+      composer.dispose();
+      renderTarget.dispose();
       rendererHandle.dispose();
     },
   };

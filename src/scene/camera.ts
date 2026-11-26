@@ -55,13 +55,14 @@ export function createCameraRig(initialWidth: number, initialHeight: number): Ca
   const initialAspect = initialHeight > 0 ? initialWidth / initialHeight : 4 / 3;
   const initialFraming = computeCameraFraming(initialAspect);
 
+  const initialEyeDrop = initialFraming.isPortrait ? 0.25 : 0.42;
   const camera = new THREE.PerspectiveCamera(
     initialFraming.fov,
     initialAspect,
     CAMERA_NEAR,
     CAMERA_FAR,
   );
-  camera.position.set(0, initialFraming.targetOffsetY, initialFraming.cameraZ);
+  camera.position.set(0, initialFraming.targetOffsetY - initialEyeDrop, initialFraming.cameraZ);
   camera.lookAt(0, initialFraming.targetOffsetY, 0);
 
   let framing = initialFraming;
@@ -70,7 +71,7 @@ export function createCameraRig(initialWidth: number, initialHeight: number): Ca
   let hasMovedOnce = false;
   let camX = 0;
   let camVelX = 0;
-  let camY = initialFraming.targetOffsetY;
+  let camY = initialFraming.targetOffsetY - initialEyeDrop;
   let rawMouseX = 0;
   let rawMouseY = 0;
   let parallaxX = 0;
@@ -134,7 +135,8 @@ export function createCameraRig(initialWidth: number, initialHeight: number): Ca
       parallaxX += (targetParallaxX - parallaxX) * pAlpha;
       parallaxY += (targetParallaxY - parallaxY) * pAlpha;
 
-      const desiredBaseY = framing.targetOffsetY;
+      const eyeDrop = framing.isPortrait ? 0.25 : 0.42;
+      const desiredBaseY = framing.targetOffsetY - eyeDrop;
       const yAlpha = reducedMotion ? 1 : 1 - Math.exp(-8 * dt);
       camY += (desiredBaseY - camY) * yAlpha;
 

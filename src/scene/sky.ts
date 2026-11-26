@@ -46,31 +46,27 @@ float skyFbm(vec2 p) {
 void main() {
   float y = clamp(vSkyUv.y, 0.0, 1.0);
 
-  vec3 cUpper = vec3(0.816, 0.796, 0.753);   // #d0cbc0 overcast warm grey-beige
-  vec3 cMid = vec3(0.902, 0.886, 0.843);     // #e6e2d7 warm pearl mid-sky
-  vec3 cMistBand = vec3(0.957, 0.945, 0.902); // #f4f1e6 luminous valley horizon mist
-  vec3 cHaze = vec3(0.788, 0.808, 0.839);    // #c9ced6 muted overcast horizon haze
+  // Luminous warm overcast ivory sky (#dfddd4 zenith -> #ebe8df mid -> #f3f1ea horizon)
+  vec3 cZenith = vec3(0.7379, 0.7231, 0.6584);       // #dfddd4
+  vec3 cMid = vec3(0.8228, 0.7991, 0.7379);          // #ebe8df
+  vec3 cHorizon = vec3(0.8963, 0.8796, 0.8228);      // #f3f1ea
+  vec3 cBacklightCrest = vec3(0.945, 0.928, 0.872);  // subtle warm ivory crest feeding bloom
 
-  vec3 col = mix(cHaze, cMistBand, smoothstep(0.18, 0.42, y));
-  col = mix(col, cMid, smoothstep(0.42, 0.70, y));
-  col = mix(col, cUpper, smoothstep(0.70, 0.98, y));
+  vec3 col = mix(cHorizon, cMid, smoothstep(0.18, 0.56, y));
+  col = mix(col, cZenith, smoothstep(0.56, 0.98, y));
 
-  // Sweeping painterly diagonal overcast cloud strata (upper-right toward lower-left)
-  vec2 streakUv = vec2(vSkyUv.x * 2.6 + vSkyUv.y * 1.65, vSkyUv.y * 4.4 - vSkyUv.x * 0.72);
-  float streakPrimary = skyFbm(streakUv * 2.5);
-  float streakFine = skyFbm(streakUv * 5.2 + vec2(3.1, -1.7));
-  float strata = smoothstep(0.26, 0.78, streakPrimary * 0.72 + streakFine * 0.28);
-  float upperMask = smoothstep(0.30, 0.84, y) * (1.0 - smoothstep(0.93, 1.0, y));
-  col = mix(col, cUpper * 0.93, strata * 0.36 * upperMask);
+  // Faint upper atmospheric wisps in warm taupe-ivory
+  vec2 streakUv = vec2(vSkyUv.x * 1.9, vSkyUv.y * 6.5);
+  float wispA = skyFbm(streakUv * 2.1 + vec2(0.4, -0.3));
+  float upperMask = smoothstep(0.38, 0.86, y);
+  col = mix(col, cZenith * 0.97, smoothstep(0.42, 0.78, wispA) * 0.28 * upperMask);
 
-  // Delicate bright overcast wisps catching diffused valley light
-  float wispHighlight = smoothstep(0.56, 0.86, streakFine) * upperMask;
-  col = mix(col, cMistBand, wispHighlight * 0.16);
-
-  // Soft sunlit-pearl radiant valley glow behind the center horizon
-  float glowDist = length((vSkyUv - vec2(0.44, 0.42)) * vec2(0.92, 1.55));
-  float centerGlow = smoothstep(0.72, 0.04, glowDist);
-  col = mix(col, cMistBand, centerGlow * 0.38);
+  // Soft backlit horizon luminosity crest behind distant spires and hero silhouette
+  float crestBand = smoothstep(0.16, 0.34, y) * (1.0 - smoothstep(0.38, 0.62, y));
+  vec2 sunCenter = vec2(0.46, 0.38);
+  float sunDist = length((vSkyUv - sunCenter) * vec2(1.05, 1.6));
+  float sunGlow = smoothstep(0.48, 0.04, sunDist) * (0.72 + 0.28 * wispA);
+  col = mix(col, cBacklightCrest, clamp(crestBand * 0.58 + sunGlow * 0.36, 0.0, 0.82));
 
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
@@ -90,7 +86,7 @@ export function createSkyDome(): SkyController {
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(0, 6, -120);
-  mesh.renderOrder = -10;
+  mesh.renderOrder = -12;
 
   return {
     mesh,

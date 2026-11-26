@@ -63,7 +63,9 @@ export interface AssetManifest {
   plates: Record<PlateKey, PlateSpec>;
   landmarks: Record<LandmarkKey, LandmarkAssetSpec>;
   audio: {
+    opus: string;
     primary: string;
+    fallbackM4a: string;
     fallbackOgg: string;
   };
 }
@@ -73,7 +75,7 @@ export function resolveAssetUrl(relativePath: string): string {
     (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? './';
   const normalizedBase = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
   const cleanRel = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
-  return `${normalizedBase}${cleanRel}`;
+  return `${normalizedBase}${encodeURI(cleanRel)}`;
 }
 
 export const ASSET_MANIFEST: AssetManifest = {
@@ -105,51 +107,51 @@ export const ASSET_MANIFEST: AssetManifest = {
   plates: {
     citadel: {
       path: 'assets/backdrop/citadel.webp',
-      z: -55,
-      parallax: 0.78,
+      z: -46,
+      parallax: 0.7,
       horizonY: HORIZON_Y,
-      fogMix: 0.18,
+      fogMix: 0.05,
       tileX: false,
-      offsetX: -21.35,
-      offsetY: 4.088,
-      worldWidth: 43.65,
-      worldHeight: 29.825,
+      offsetX: -20.25,
+      offsetY: 6.838,
+      worldWidth: 37.5,
+      worldHeight: 25.925,
     },
     ghostCastle: {
       path: 'assets/backdrop/ghost-castle.webp',
-      z: -60,
-      parallax: 0.85,
+      z: -62,
+      parallax: 0.86,
       horizonY: HORIZON_Y,
-      fogMix: 0.25,
+      fogMix: 0.06,
       tileX: false,
-      offsetX: 11.0,
-      offsetY: 4.225,
-      worldWidth: 19.25,
-      worldHeight: 14.65,
+      offsetX: 4.487,
+      offsetY: 4.15,
+      worldWidth: 108.925,
+      worldHeight: 23.7,
     },
     watchtower: {
       path: 'assets/backdrop/watchtower.webp',
-      z: -36,
-      parallax: 0.6,
+      z: -30,
+      parallax: 0.48,
       horizonY: HORIZON_Y,
-      fogMix: 0.12,
+      fogMix: 0.04,
       tileX: false,
-      offsetX: 19.587,
-      offsetY: 6.775,
-      worldWidth: 13.075,
-      worldHeight: 21.95,
+      offsetX: 23.163,
+      offsetY: 6.0,
+      worldWidth: 16.325,
+      worldHeight: 26.0,
     },
     clouds: {
       path: 'assets/backdrop/clouds.webp',
-      z: -28,
-      parallax: 0.5,
+      z: -22,
+      parallax: 0.34,
       horizonY: HORIZON_Y,
       fogMix: 0.0,
       tileX: true,
       offsetX: 0.0,
-      offsetY: 1.0,
+      offsetY: 0.0,
       worldWidth: 96.0,
-      worldHeight: 17.0,
+      worldHeight: 11.0,
     },
     foregroundLip: {
       path: 'assets/backdrop/foreground-lip.webp',
@@ -199,7 +201,9 @@ export const ASSET_MANIFEST: AssetManifest = {
     },
   },
   audio: {
+    opus: 'assets/Musics/Valkyrie Profile OST - To a World Becoming Impure.opus',
     primary: 'assets/audio/theme.mp3',
+    fallbackM4a: 'assets/audio/theme.m4a',
     fallbackOgg: 'assets/audio/theme.ogg',
   },
 };

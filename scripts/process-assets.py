@@ -49,7 +49,13 @@ def save_rgba(arr: np.ndarray, path: Path) -> None:
     Image.fromarray(arr, mode='RGBA').save(path, format='PNG', optimize=True)
 
 
-def encode_webp(arr: np.ndarray, out_path: Path, quality: int = 86, alpha_q: int = 96) -> int:
+def encode_webp(
+    arr: np.ndarray,
+    out_path: Path,
+    quality: int = 86,
+    alpha_q: int = 96,
+    exact: bool = False,
+) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_path = Path(tmp.name)
@@ -64,10 +70,10 @@ def encode_webp(arr: np.ndarray, out_path: Path, quality: int = 86, alpha_q: int
             str(alpha_q),
             '-m',
             '6',
-            str(tmp_path),
-            '-o',
-            str(out_path),
         ]
+        if exact:
+            cmd.append('-exact')
+        cmd.extend([str(tmp_path), '-o', str(out_path)])
         subprocess.run(cmd, check=True)
     finally:
         tmp_path.unlink(missing_ok=True)
@@ -690,7 +696,149 @@ def process_citadel(
     out_path: Path,
     quality: int = 86,
 ) -> tuple[dict[str, float], int]:
-    # Front-left silver-white marble citadel
+    if main_raw_path.name.startswith('citadel-user-v4-raw'):
+        raw = load_rgba(main_raw_path)
+        h, w = raw.shape[:2]
+        if float((raw[..., 3] < 20).mean()) > 0.10:
+            matted = raw.copy()
+        else:
+            sky_patch = raw[:24, int(w * 0.82) : max(int(w * 0.82) + 1, w - 4), :3]
+            bg_rgb = (
+                np.median(sky_patch.reshape(-1, 3), axis=0).astype(np.float32)
+                if sky_patch.size > 0
+                else np.array([255.0, 255.0, 255.0], dtype=np.float32)
+            )
+            padded = np.full((h + 2, w, 4), (80, 84, 80, 255), dtype=np.uint8)
+            padded[:h, :] = raw
+            matted_padded = extract_bg_matte(
+                padded,
+                lo_dist=8.0,
+                hi_dist=32.0,
+                border_flood=True,
+                clear_interior_dist=0.0,
+                bg_rgb=bg_rgb,
+                decontaminate=True,
+            )
+            matted = remove_small_islands(matted_padded[:h, :], min_pixels=200, alpha_thresh=16)
+        matted = grade_atmospheric_depth(
+            matted,
+            lift_floor=22.0,
+            mist_rgb=(220.0, 222.0, 216.0),
+            mist_bottom=0.14,
+            mist_top=0.02,
+        )
+        placed, cx, cy, cw, ch = place_in_master_slot(
+            matted,
+            slot_x0=360,
+            slot_y0=160,
+            slot_x1=1860,
+            slot_y1=1300,
+            align_x='center',
+            align_y='bottom',
+        )
+        placed = np.array(
+            Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.35)),
+            dtype=np.uint8,
+        )
+        placed = apply_edge_fade(placed, bottom_frac=0.08)
+        tx0, ty0, tx1, ty1 = alpha_bbox(placed, thresh=4)
+        trimmed = placed[ty0:ty1, tx0:tx1]
+        trimmed = bleed_rgb_into_transparent(trimmed, passes=16, alpha_thresh=16)
+        byte_size = encode_webp(trimmed, out_path, quality=quality, alpha_q=95)
+        placement = crop_pixels_to_manifest(cx + tx0, cy + ty0, tx1 - tx0, ty1 - ty0)
+        return placement, byte_size
+
+    if main_raw_path.name.startswith('citadel-valley-v3-raw'):
+        raw = load_rgba(main_raw_path)
+        h, w = raw.shape[:2]
+        bg_rgb = np.median(raw[:24, int(w * 0.80) : w - 4, :3].reshape(-1, 3), axis=0).astype(np.float32)
+        padded = np.full((h + 2, w + 2, 4), (60, 64, 60, 255), dtype=np.uint8)
+        padded[:h, 2:] = raw
+        matted_padded = extract_bg_matte(
+            padded,
+            lo_dist=12.0,
+            hi_dist=36.0,
+            border_flood=True,
+            clear_interior_dist=0.0,
+            bg_rgb=bg_rgb,
+            decontaminate=True,
+        )
+        matted = matted_padded[:h, 2:]
+        matted = remove_small_islands(matted, min_pixels=250, alpha_thresh=20)
+        matted = grade_atmospheric_depth(
+            matted,
+            lift_floor=64.0,
+            mist_rgb=(214.0, 218.0, 216.0),
+            mist_bottom=0.22,
+            mist_top=0.05,
+        )
+        placed, cx, cy, cw, ch = place_in_master_slot(
+            matted,
+            slot_x0=-160,
+            slot_y0=300,
+            slot_x1=2160,
+            slot_y1=1380,
+            align_x='left',
+            align_y='bottom',
+        )
+        placed = np.array(
+            Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.4)),
+            dtype=np.uint8,
+        )
+        placed = apply_edge_fade(placed, bottom_frac=0.10)
+        tx0, ty0, tx1, ty1 = alpha_bbox(placed, thresh=4)
+        trimmed = placed[ty0:ty1, tx0:tx1]
+        trimmed = bleed_rgb_into_transparent(trimmed, passes=16, alpha_thresh=16)
+        byte_size = encode_webp(trimmed, out_path, quality=quality, alpha_q=95)
+        placement = crop_pixels_to_manifest(cx + tx0, cy + ty0, tx1 - tx0, ty1 - ty0)
+        return placement, byte_size
+
+    if main_raw_path.name.startswith('citadel-valley-v2-raw'):
+        raw = load_rgba(main_raw_path)
+        # Crop out the thin extra rising rock wall on the far right edge so the green promontory slopes cleanly into valley
+        raw = raw[:, :710, :]
+        # Sample sky strictly from the pure open top-right sky patch (avoid dark cliffs along bottom/left border)
+        bg_rgb = np.median(raw[:24, 560:700, :3].reshape(-1, 3), axis=0).astype(np.float32)
+        matted = extract_bg_matte(
+            raw,
+            lo_dist=12.0,
+            hi_dist=36.0,
+            border_flood=True,
+            clear_interior_dist=0.0,
+            bg_rgb=bg_rgb,
+            decontaminate=True,
+        )
+        matted = remove_small_islands(matted, min_pixels=250, alpha_thresh=20)
+        # Keep crisp citadel/waterfall/aqueduct contrast with gentle atmospheric lift
+        matted = grade_atmospheric_depth(
+            matted,
+            lift_floor=42.0,
+            mist_rgb=(214.0, 218.0, 216.0),
+            mist_bottom=0.22,
+            mist_top=0.05,
+        )
+        placed, cx, cy, cw, ch = place_in_master_slot(
+            matted,
+            slot_x0=-160,
+            slot_y0=420,
+            slot_x1=2160,
+            slot_y1=1380,
+            align_x='left',
+            align_y='bottom',
+        )
+        placed = np.array(
+            Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.4)),
+            dtype=np.uint8,
+        )
+        placed = apply_edge_fade(placed, right_frac=0.08, bottom_frac=0.10)
+        tx0, ty0, tx1, ty1 = alpha_bbox(placed, thresh=4)
+        trimmed = placed[ty0:ty1, tx0:tx1]
+        trimmed = bleed_rgb_into_transparent(trimmed, passes=16, alpha_thresh=16)
+        byte_size = encode_webp(trimmed, out_path, quality=quality, alpha_q=95)
+        placement = crop_pixels_to_manifest(cx + tx0, cy + ty0, tx1 - tx0, ty1 - ty0)
+        return placement, byte_size
+
+    # Legacy fallback path: Front-left silver-white marble citadel
     main_raw = load_rgba(main_raw_path)
     main_matted = extract_bg_matte(
         main_raw,
@@ -796,15 +944,62 @@ def process_citadel(
 
 def process_ghost_castle(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[dict[str, float], int]:
     raw = load_rgba(raw_path)
+    if raw_path.name.startswith('far-mountains-v2-raw'):
+        # Sample sky strictly from the pure top sky strip (avoid dark bottom mountains)
+        bg_rgb = np.median(raw[:16, :, :3].reshape(-1, 3), axis=0).astype(np.float32)
+        matted = extract_bg_matte(
+            raw,
+            lo_dist=12.0,
+            hi_dist=36.0,
+            border_flood=True,
+            clear_interior_dist=0.0,
+            bg_rgb=bg_rgb,
+            decontaminate=True,
+        )
+        matted = remove_small_islands(matted, min_pixels=200, alpha_thresh=18)
+        # Soften dark mountain foreground ridges gently into realistic distant blue-sage mist
+        matted = grade_atmospheric_depth(
+            matted,
+            lift_floor=115.0,
+            mist_rgb=(210.0, 214.0, 215.0),
+            mist_bottom=0.52,
+            mist_top=0.28,
+        )
+        # Extend left & right flanks cleanly with fliplr at each edge so ridge heights match continuously without duplicating castle
+        flank_l = np.fliplr(matted[:, :200, :])
+        flank_r_src = matted[:, -75:, :]
+        flank_r = np.concatenate([np.fliplr(flank_r_src), flank_r_src], axis=1)
+        panoramic = np.concatenate([flank_l, matted, flank_r], axis=1)
+        placed, cx, cy, cw, ch = place_in_master_slot(
+            panoramic,
+            slot_x0=-480,
+            slot_y0=400,
+            slot_x1=4680,
+            slot_y1=1360,
+            align_x='center',
+            align_y='bottom',
+        )
+        placed = np.array(
+            Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.5)),
+            dtype=np.uint8,
+        )
+        placed = apply_edge_fade(placed, left_frac=0.03, right_frac=0.03, bottom_frac=0.14)
+        tx0, ty0, tx1, ty1 = alpha_bbox(placed, thresh=4)
+        trimmed = placed[ty0:ty1, tx0:tx1]
+        trimmed = bleed_rgb_into_transparent(trimmed, passes=14, alpha_thresh=14)
+        byte_size = encode_webp(trimmed, out_path, quality=quality, alpha_q=95)
+        placement = crop_pixels_to_manifest(cx + tx0, cy + ty0, tx1 - tx0, ty1 - ty0)
+        return placement, byte_size
+
     rgb = raw[..., :3].astype(np.float32)
     lum = 0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]
 
     # Map luminance smoothly to luminous misty pearl-grey mirage: sky/dark wisps fade to 0 while spires stay intact
     lum_norm = np.clip((lum - 46.0) / 138.0, 0.0, 1.0)
-    alpha = np.power(lum_norm, 0.82) * 0.68
+    alpha = np.power(lum_norm, 0.78) * 0.84
 
-    shadow_mist = np.array([200.0, 206.0, 216.0], dtype=np.float32)[None, None, :]
-    light_mist = np.array([240.0, 238.0, 230.0], dtype=np.float32)[None, None, :]
+    shadow_mist = np.array([154.0, 162.0, 174.0], dtype=np.float32)[None, None, :]
+    light_mist = np.array([228.0, 226.0, 216.0], dtype=np.float32)[None, None, :]
     clean_rgb = shadow_mist * (1.0 - lum_norm[..., None]) + light_mist * lum_norm[..., None]
 
     matted = np.empty_like(raw)
@@ -835,6 +1030,145 @@ def process_ghost_castle(raw_path: Path, out_path: Path, quality: int = 86) -> t
 
 def process_watchtower(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[dict[str, float], int]:
     raw = load_rgba(raw_path)
+    if raw_path.name.startswith('watchtower-sanctuary-v3-raw'):
+        bg_rgb = np.median(raw[:24, :24, :3].reshape(-1, 3), axis=0).astype(np.float32)
+        rgb_raw = raw[..., :3].astype(np.float32)
+        mag_raw = 0.5 * (rgb_raw[..., 0] + rgb_raw[..., 2]) - rgb_raw[..., 1]
+        dist_raw = np.linalg.norm(rgb_raw - bg_rgb[None, None, :], axis=-1)
+        outer_mag = border_flood_mask((dist_raw <= 88.0) | (mag_raw > 26.0))
+        matted = extract_bg_matte(
+            raw,
+            lo_dist=26.0,
+            hi_dist=84.0,
+            border_flood=True,
+            clear_interior_dist=0.0,
+            bg_rgb=bg_rgb,
+            decontaminate=True,
+        )
+        matted[outer_mag, 3] = 0
+        alpha = np.where(matted[..., 3] >= 160, 255, 0).astype(np.uint8)
+        # Purge any remaining magenta fringe on outer 3px ring and neutralize spill on 4px ring
+        rgb_f = matted[..., :3].astype(np.float32)
+        mag_excess = 0.5 * (rgb_f[..., 0] + rgb_f[..., 2]) - rgb_f[..., 1]
+        outer_ring = dilate_mask(alpha == 0, 3) & (alpha > 0)
+        alpha[outer_ring & (mag_excess > 16.0)] = 0
+        near_edge = dilate_mask(alpha == 0, 4) & (alpha > 0)
+        despill = near_edge & (mag_excess > 6.0)
+        if np.any(despill):
+            g_val = rgb_f[despill, 1]
+            rgb_f[despill, 0] = np.minimum(rgb_f[despill, 0], g_val + 4.0)
+            rgb_f[despill, 2] = np.minimum(rgb_f[despill, 2], g_val + 4.0)
+        matted[..., :3] = np.clip(np.round(rgb_f), 0, 255).astype(np.uint8)
+        matted[..., 3] = alpha
+        matted = remove_small_islands(matted, min_pixels=120, alpha_thresh=128)
+        matted = grade_atmospheric_depth(
+            matted,
+            lift_floor=28.0,
+            mist_rgb=(232.0, 229.0, 220.0),
+            mist_bottom=0.10,
+            mist_top=0.02,
+        )
+        mh = matted.shape[0]
+        # Splice left rubble parapet + overhanging cliff edge cleanly onto the right wall
+        base_body = matted[:, :868, :].copy()
+        right_cap = np.fliplr(matted[:, 285:466, :])
+        seam_w = 22
+        ext_w = base_body.shape[1] + right_cap.shape[1] - seam_w
+        extended = np.zeros((mh, ext_w, 4), dtype=np.uint8)
+        extended[:, : 868 - seam_w, :] = base_body[:, : 868 - seam_w, :]
+        extended[:, 868:, :] = right_cap[:, seam_w:, :]
+
+        b_ov = base_body[:, 868 - seam_w : 868, :]
+        r_ov = right_cap[:, :seam_w, :]
+        both = (b_ov[..., 3] > 128) & (r_ov[..., 3] > 128)
+        only_b = (b_ov[..., 3] > 128) & (r_ov[..., 3] <= 128)
+        only_r = (r_ov[..., 3] > 128) & (b_ov[..., 3] <= 128)
+
+        t_blend = np.linspace(0.0, 1.0, seam_w, dtype=np.float32)[None, :, None]
+        blended_rgb = np.clip(
+            np.round(b_ov[..., :3].astype(np.float32) * (1.0 - t_blend) + r_ov[..., :3].astype(np.float32) * t_blend),
+            0,
+            255,
+        ).astype(np.uint8)
+        ys_grid = np.arange(mh, dtype=np.int32)[:, None]
+        slope_cut = (615.0 + (np.arange(seam_w, dtype=np.float32) / max(1, seam_w - 1)) * 64.0)[None, :]
+        keep_b = only_b & (ys_grid >= slope_cut)
+
+        ov_out = np.zeros_like(b_ov)
+        ov_out[both, :3] = blended_rgb[both]
+        ov_out[both, 3] = 255
+        ov_out[keep_b, :3] = b_ov[keep_b, :3]
+        ov_out[keep_b, 3] = 255
+        ov_out[only_r, :3] = r_ov[only_r, :3]
+        ov_out[only_r, 3] = 255
+        extended[:, 868 - seam_w : 868, :] = ov_out
+
+        x0, y0, x1, y1 = alpha_bbox(extended, thresh=128)
+        tight = extended[y0:y1, x0:x1]
+        ch, cw = tight.shape[:2]
+        scale = 1040.0 / ch
+        new_w = max(1, int(round(cw * scale)))
+        new_h = max(1, int(round(ch * scale)))
+        placed = np.array(
+            Image.fromarray(tight, mode='RGBA').resize((new_w, new_h), Image.Resampling.NEAREST),
+            dtype=np.uint8,
+        )
+        px = 2520
+        py = 1320 - new_h
+        tx0, ty0, tx1, ty1 = alpha_bbox(placed, thresh=128)
+        trimmed = placed[ty0:ty1, tx0:tx1]
+        trimmed = bleed_rgb_into_transparent(trimmed, passes=12, alpha_thresh=128)
+        byte_size = encode_webp(trimmed, out_path, quality=92, alpha_q=100, exact=True)
+        placement = crop_pixels_to_manifest(px + tx0, py + ty0, tx1 - tx0, ty1 - ty0)
+        return placement, byte_size
+
+    if raw_path.name.startswith('watchtower-cliff-v2-raw'):
+        # Sample sky strictly from the pure top-left sky strip (avoid dark right cliff)
+        bg_rgb = np.median(raw[:24, :280, :3].reshape(-1, 3), axis=0).astype(np.float32)
+        matted = extract_bg_matte(
+            raw,
+            lo_dist=12.0,
+            hi_dist=36.0,
+            border_flood=True,
+            clear_interior_dist=0.0,
+            bg_rgb=bg_rgb,
+            decontaminate=True,
+        )
+        matted = remove_small_islands(matted, min_pixels=200, alpha_thresh=18)
+        matted = grade_atmospheric_depth(
+            matted,
+            lift_floor=36.0,
+            mist_rgb=(210.0, 214.0, 212.0),
+            mist_bottom=0.14,
+            mist_top=0.03,
+        )
+        # Extend cliff rock wall rightward using ONLY the building-free far-right mossy rock strip
+        right_cliff = matted[:, -44:, :]
+        extended = np.concatenate(
+            [matted, np.fliplr(right_cliff), right_cliff, np.fliplr(right_cliff)],
+            axis=1,
+        )
+        placed, cx, cy, cw, ch = place_in_master_slot(
+            extended,
+            slot_x0=1660,
+            slot_y0=390,
+            slot_x1=3580,
+            slot_y1=1360,
+            align_x='left',
+            align_y='bottom',
+        )
+        placed = np.array(
+            Image.fromarray(placed, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.35)),
+            dtype=np.uint8,
+        )
+        placed = apply_edge_fade(placed, left_frac=0.06, bottom_frac=0.08)
+        tx0, ty0, tx1, ty1 = alpha_bbox(placed, thresh=4)
+        trimmed = placed[ty0:ty1, tx0:tx1]
+        trimmed = bleed_rgb_into_transparent(trimmed, passes=16, alpha_thresh=16)
+        byte_size = encode_webp(trimmed, out_path, quality=quality, alpha_q=95)
+        placement = crop_pixels_to_manifest(cx + tx0, cy + ty0, tx1 - tx0, ty1 - ty0)
+        return placement, byte_size
+
     rgb = raw[..., :3].astype(np.float32)
     lum = 0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]
     bg_decontam = np.array([205.0, 200.0, 178.0], dtype=np.float32)
@@ -888,6 +1222,139 @@ def process_watchtower(raw_path: Path, out_path: Path, quality: int = 86) -> tup
     byte_size = encode_webp(trimmed, out_path, quality=quality, alpha_q=95)
     placement = crop_pixels_to_manifest(cx + tx0, cy + ty0, tx1 - tx0, ty1 - ty0)
     return placement, byte_size
+
+
+def process_cloud_bank_right(raw_path: Path, out_path: Path, quality: int = 86) -> int:
+    raw = load_rgba(raw_path)
+    h, w = raw.shape[:2]
+    bg_rgb = np.median(raw[:16, :120, :3].reshape(-1, 3), axis=0).astype(np.float32)
+    # Pad left, right, and bottom 2px opaque so flood keys ONLY sky above cumulus tops (no interior gaps)
+    padded = np.full((h + 2, w + 4, 4), (180, 175, 165, 255), dtype=np.uint8)
+    padded[:h, 2 : w + 2] = raw
+    matted = extract_bg_matte(
+        padded,
+        lo_dist=18.0,
+        hi_dist=42.0,
+        border_flood=True,
+        clear_interior_dist=0.0,
+        bg_rgb=bg_rgb,
+        decontaminate=True,
+    )[:h, 2 : w + 2]
+    matted = remove_small_islands(matted, min_pixels=150, alpha_thresh=24)
+
+    rgb = matted[..., :3].astype(np.float32)
+    lum = 0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]
+    t = np.clip((lum - 68.0) / 172.0, 0.0, 1.0)
+    t_q = np.floor(t * 6.0) / 5.0
+    t_mix = np.clip(0.65 * t_q + 0.35 * t, 0.0, 1.0)
+
+    c_shadow = np.array([207.0, 201.0, 188.0], dtype=np.float32)
+    c_mid = np.array([220.0, 216.0, 205.0], dtype=np.float32)
+    c_hi = np.array([232.0, 230.0, 223.0], dtype=np.float32)
+
+    low_t = np.clip(t_mix / 0.55, 0.0, 1.0)[..., None]
+    hi_t = np.clip((t_mix - 0.55) / 0.45, 0.0, 1.0)[..., None]
+    low_rgb = c_shadow * (1.0 - low_t) + c_mid * low_t
+    hi_rgb = c_mid * (1.0 - hi_t) + c_hi * hi_t
+    regraded_rgb = np.where((t_mix <= 0.55)[..., None], low_rgb, hi_rgb)
+
+    regraded = matted.copy()
+    regraded[..., :3] = np.clip(np.round(regraded_rgb), 0, 255).astype(np.uint8)
+
+    tx0, ty0, tx1, ty1 = alpha_bbox(regraded, thresh=8)
+    cropped = regraded[ty0:ty1, tx0:tx1]
+    ch, cw = cropped.shape[:2]
+    if cw > 1024:
+        new_h = max(1, int(round(ch * (1024.0 / cw))))
+        cropped = np.array(
+            Image.fromarray(cropped, mode='RGBA').resize((1024, new_h), Image.Resampling.NEAREST),
+            dtype=np.uint8,
+        )
+    elif cw < 640:
+        cropped = np.array(
+            Image.fromarray(cropped, mode='RGBA').resize((cw * 2, ch * 2), Image.Resampling.NEAREST),
+            dtype=np.uint8,
+        )
+
+    faded = apply_edge_fade(cropped, left_frac=0.14, right_frac=0.0, bottom_frac=0.08)
+    bled = bleed_rgb_into_transparent(faded, passes=12, alpha_thresh=16)
+    return encode_webp(bled, out_path, quality=quality, alpha_q=96, exact=True)
+
+
+def process_celestial_sky(out_path: Path, quality: int = 86) -> tuple[int, float]:
+    gw, gh = 512, 192
+    theta = (2.0 * math.pi * np.arange(gw, dtype=np.float32) / gw)[None, :]
+    yn = (np.arange(gh, dtype=np.float32) / gh)[:, None]
+
+    # Strictly integer horizontal harmonics of theta so x=0 matches x=gw seamlessly
+    field = np.zeros((gh, gw), dtype=np.float32)
+    harmonics = [
+        (1, 19.0, 0.4, 0.32),
+        (-2, 29.0, 1.3, 0.24),
+        (3, 44.0, 2.1, 0.18),
+        (-5, 68.0, 0.9, 0.14),
+        (7, 95.0, 2.7, 0.08),
+    ]
+    for freq_x, freq_y, phase, amp in harmonics:
+        warp = 0.22 * np.sin(theta * max(1, abs(freq_x) - 1) + phase)
+        val = 0.5 + 0.5 * np.sin(
+            theta * freq_x + yn * freq_y + warp * 4.5 + phase
+        )
+        # Sharpen slightly into thin wispy altostratus ribbons
+        ribbon = np.power(val, 1.35)
+        field += ribbon * amp
+
+    # Soft horizon-to-zenith density modulation so bands float naturally across upper-mid sky
+    strat_env = 0.35 + 0.65 * np.sin(np.clip(yn, 0.0, 1.0) * math.pi)
+    scalar = np.clip((field - 0.18) / 0.72, 0.0, 1.0) * strat_env
+
+    bayer = (
+        np.array(
+            [
+                [0, 8, 2, 10],
+                [12, 4, 14, 6],
+                [3, 11, 1, 9],
+                [15, 7, 13, 5],
+            ],
+            dtype=np.float32,
+        )
+        / 16.0
+        - 0.5
+    )
+    bayer_tiled = np.tile(bayer, (gh // 4, gw // 4))
+
+    palette = np.array(
+        [
+            [207, 201, 188],  # #cfc9bc faded taupe-grey
+            [226, 221, 209],  # #e2ddd1 soft parchment
+            [240, 234, 224],  # #f0eae0 warm ivory
+            [241, 237, 228],  # #f1ede4 pale parchment
+        ],
+        dtype=np.uint8,
+    )
+    scaled = np.clip(scalar * 3.0 + bayer_tiled * 0.72, 0.0, 2.999)
+    idx = np.clip(np.round(scaled).astype(np.int32), 0, 3)
+    rgb = palette[idx]
+
+    # Smooth vertical alpha envelope (bottom 18% & top 6% fade smoothly to 0)
+    bot_fade = np.clip((1.0 - yn) / 0.18, 0.0, 1.0)
+    top_fade = np.clip(yn / 0.06, 0.0, 1.0)
+    env = (0.5 - 0.5 * np.cos(math.pi * bot_fade)) * (0.5 - 0.5 * np.cos(math.pi * top_fade))
+    alpha = np.clip(np.round((95.0 + scalar * 120.0) * env), 0, 215).astype(np.uint8)
+
+    grid_rgba = np.dstack([rgb, alpha])
+    upscaled = np.array(
+        Image.fromarray(grid_rgba, mode='RGBA').resize((gw * 2, gh * 2), Image.Resampling.NEAREST),
+        dtype=np.uint8,
+    )
+    byte_size = encode_webp(upscaled, out_path, quality=quality, alpha_q=98, exact=True)
+    field_seam = float(np.max(np.abs(field[:, 0] - field[:, -1])))
+    decoded = load_rgba(out_path).astype(np.float32)
+    # Compare matching Bayer-grid phase (x=0 vs x=-4) after lossy WebP encoding
+    seam_diff = float(np.mean(np.abs(decoded[:, 0, :] - decoded[:, -4, :])))
+    if field_seam > 0.05 or seam_diff >= 4.0:
+        raise RuntimeError(f'{out_path.name} seam diff field={field_seam:.3f} webp={seam_diff:.2f}!')
+    return byte_size, seam_diff
 
 
 def _build_seamless_cloud_layer(
@@ -972,7 +1439,7 @@ def _build_seamless_cloud_layer(
     wrapped = np.concatenate([out_u8[:, -pad_x:, :], out_u8, out_u8[:, :pad_x, :]], axis=1)
     wrapped = bleed_rgb_into_transparent(wrapped, passes=12, alpha_thresh=12)
     out_u8 = wrapped[:, pad_x:-pad_x, :]
-    byte_size = encode_webp(out_u8, out_path, quality=quality, alpha_q=95)
+    byte_size = encode_webp(out_u8, out_path, quality=quality, alpha_q=95, exact=True)
 
     decoded = load_rgba(out_path).astype(np.float32)
     seam_diff = float(np.mean(np.abs(decoded[:, 0, :] - decoded[:, -1, :])))
@@ -982,6 +1449,8 @@ def _build_seamless_cloud_layer(
 
 
 def process_clouds(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[int, float]:
+    if raw_path.name.startswith('cloud-wisps-v2-raw'):
+        return _build_sparse_seamless_clouds(raw_path, out_path, quality=quality, opacity_scale=0.68, band_mode='valley')
     return _build_seamless_cloud_layer(
         raw_path=raw_path,
         out_path=out_path,
@@ -996,6 +1465,8 @@ def process_clouds(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[i
 
 
 def process_cloud_wisps(raw_path: Path, out_path: Path, quality: int = 86) -> tuple[int, float]:
+    if raw_path.name.startswith('cloud-wisps-v2-raw'):
+        return _build_sparse_seamless_clouds(raw_path, out_path, quality=quality, opacity_scale=0.78, band_mode='wisps')
     return _build_seamless_cloud_layer(
         raw_path=raw_path,
         out_path=out_path,
@@ -1007,6 +1478,71 @@ def process_cloud_wisps(raw_path: Path, out_path: Path, quality: int = 86) -> tu
         highlight_rgb=(249.0, 247.0, 240.0),
         sculpt_canyon_rim=False,
     )
+
+
+def _build_sparse_seamless_clouds(
+    raw_path: Path,
+    out_path: Path,
+    quality: int,
+    opacity_scale: float,
+    band_mode: str,
+) -> tuple[int, float]:
+    raw = load_rgba(raw_path)
+    bg_rgb = sample_border_bg(raw[..., :3].astype(np.float32), pad=6)
+    matted = extract_bg_matte(
+        raw,
+        lo_dist=16.0,
+        hi_dist=44.0,
+        border_flood=False,
+        bg_rgb=bg_rgb,
+        decontaminate=True,
+    )
+    h, w = matted.shape[:2]
+    # Keep wide open transparent gaps (>75% empty) so clouds are sparse drifting wisps, never a horizontal wall
+    canvas = np.zeros((384, 2048, 4), dtype=np.uint8)
+    slots = (
+        [(140, 120, 420, 320, 88), (820, 160, 1140, 340, 108), (1540, 90, 1860, 280, 74)]
+        if band_mode == 'wisps'
+        else [(120, 140, 480, 350, 140), (740, 175, 1120, 360, 120), (1460, 130, 1820, 340, 132)]
+    )
+    # Extract 3 clean individual puff regions from raw (middle puff, left-center puff, right puff)
+    crops = [
+        matted[14 : min(h, 94), 320 : min(w, 570)],
+        matted[82 : min(h, 172), 115 : min(w, 340)],
+        matted[100 : min(h, 178), 570 : min(w, 725)],
+    ]
+    for crop_arr, (dx0, dy0, dx1, _dy1, pad_y) in zip(crops, slots):
+        if crop_arr.size == 0 or not np.any(crop_arr[..., 3] > 20):
+            continue
+        x0, y0, x1, y1 = alpha_bbox(crop_arr, thresh=10)
+        tight = apply_edge_fade(crop_arr[y0:y1, x0:x1], left_frac=0.14, right_frac=0.14, top_frac=0.12, bottom_frac=0.18)
+        tw = dx1 - dx0
+        th = max(24, int(round(tight.shape[0] * (tw / max(1, tight.shape[1])))))
+        resized = np.array(
+            Image.fromarray(tight, mode='RGBA').resize((tw, th), Image.Resampling.LANCZOS),
+            dtype=np.uint8,
+        )
+        alpha_composite_over(canvas, resized, dx0, min(384 - th - 12, pad_y))
+
+    soft = np.array(
+        Image.fromarray(canvas, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=1.1)),
+        dtype=np.float32,
+    )
+    soft[..., 3] = np.clip(soft[..., 3] * opacity_scale, 0.0, 255.0)
+    out_u8 = np.round(soft).astype(np.uint8)
+    # Initialize fully transparent pixels uniformly before horizontal wrap-bleed so tile seam stays spotless
+    zero_mask = out_u8[..., 3] == 0
+    out_u8[zero_mask, :3] = (220, 224, 226)
+    pad_x = 16
+    wrapped = np.concatenate([out_u8[:, -pad_x:, :], out_u8, out_u8[:, :pad_x, :]], axis=1)
+    wrapped = bleed_rgb_into_transparent(wrapped, passes=12, alpha_thresh=10)
+    out_u8 = wrapped[:, pad_x:-pad_x, :]
+    byte_size = encode_webp(out_u8, out_path, quality=quality, alpha_q=95, exact=True)
+    decoded = load_rgba(out_path).astype(np.float32)
+    seam_diff = float(np.mean(np.abs(decoded[:, 0, :] - decoded[:, -1, :])))
+    if seam_diff >= 4.0:
+        raise RuntimeError(f'{out_path.name} seam diff {seam_diff:.2f} >= 4.0!')
+    return byte_size, seam_diff
 
 
 def extract_quadrant_sprites(raw_path: Path, bg_mode: str) -> list[np.ndarray]:
@@ -1072,7 +1608,7 @@ def process_foreground_lip(
     leaf_sprites = extract_quadrant_sprites(leaves_raw, bg_mode='light')
     bell_sprites = extract_quadrant_sprites(bells_raw, bg_mode='dark')
 
-    target_w, target_h = 2560, 320
+    target_w, target_h = 2560, 384
     canvas = np.zeros((target_h, target_w, 4), dtype=np.uint8)
     rng = np.random.default_rng(0x56504C49)
 
@@ -1098,55 +1634,55 @@ def process_foreground_lip(
         ).astype(np.uint8)
         alpha_composite_over(canvas, arr, center_x - arr.shape[1] // 2, bottom_y - arr.shape[0])
 
-    # Layer 1: Back-lip leaves (~42 clumps across ridge width, upper ~30% mostly open)
-    for i in range(42):
-        cx = int(-40 + (i / 41.0) * (target_w + 80) + rng.uniform(-24, 24))
-        by = int(rng.uniform(295, 348))
-        scale = float(rng.uniform(0.42, 0.56))
+    # Layer 1: Dense back-lip sage leaf clumps (~52 clumps)
+    for i in range(52):
+        cx = int(-40 + (i / 51.0) * (target_w + 80) + rng.uniform(-22, 22))
+        by = int(rng.uniform(352, 412))
+        scale = float(rng.uniform(0.46, 0.62))
         angle = float(rng.uniform(-12.0, 12.0))
         flip = bool(rng.integers(0, 2))
-        place_botanical(leaf_sprites[i % len(leaf_sprites)], cx, by, scale, angle, flip, 0.76)
+        place_botanical(leaf_sprites[i % len(leaf_sprites)], cx, by, scale, angle, flip, 0.72)
 
-    # Layer 2: Mid-lip arching ivory lily bells (~28 stems)
-    for i in range(28):
-        cx = int(-20 + (i / 27.0) * (target_w + 40) + rng.uniform(-28, 28))
-        by = int(rng.uniform(300, 344))
-        scale = float(rng.uniform(0.36, 0.50))
+    # Layer 2: Mid-lip bright ivory arching lily bells (~46 stems peeking between leaves)
+    for i in range(46):
+        cx = int(-20 + (i / 45.0) * (target_w + 40) + rng.uniform(-24, 24))
+        by = int(rng.uniform(346, 396))
+        scale = float(rng.uniform(0.42, 0.56))
         angle = float(rng.uniform(-10.0, 10.0))
         flip = bool(rng.integers(0, 2))
-        place_botanical(bell_sprites[i % len(bell_sprites)], cx, by, scale, angle, flip, 0.88)
+        place_botanical(bell_sprites[i % len(bell_sprites)], cx, by, scale, angle, flip, 1.06)
 
-    # Soft dark-sage ground-shadow skirt sealing the lowest 75px so hill never peeks through
+    # Soft dark-sage undergrowth shadow skirt sealing the lowest 28%
     skirt = np.zeros((target_h, target_w, 4), dtype=np.uint8)
     y_norm = np.linspace(0.0, 1.0, target_h, dtype=np.float32)[:, None]
-    skirt_t = np.clip((y_norm - 0.75) / 0.25, 0.0, 1.0)
-    skirt_alpha = np.round((0.5 - 0.5 * np.cos(np.pi * skirt_t)) * 235.0).astype(np.uint8)
-    skirt[..., 0] = 44
-    skirt[..., 1] = 56
-    skirt[..., 2] = 46
+    skirt_t = np.clip((y_norm - 0.72) / 0.28, 0.0, 1.0)
+    skirt_alpha = np.round((0.5 - 0.5 * np.cos(np.pi * skirt_t)) * 240.0).astype(np.uint8)
+    skirt[..., 0] = 35
+    skirt[..., 1] = 46
+    skirt[..., 2] = 37
     skirt[..., 3] = skirt_alpha
     alpha_composite_over(canvas, skirt, 0, 0)
 
-    # Layer 3: Front-lip dense dark-sage leaf clusters across lower edge
-    for i in range(40):
-        cx = int(-40 + (i / 39.0) * (target_w + 80) + rng.uniform(-22, 22))
-        by = int(rng.uniform(325, 378))
-        scale = float(rng.uniform(0.46, 0.62))
+    # Layer 3: Lush close-up foreground leaves (~48 broad clumps)
+    for i in range(48):
+        cx = int(-40 + (i / 47.0) * (target_w + 80) + rng.uniform(-22, 22))
+        by = int(rng.uniform(382, 444))
+        scale = float(rng.uniform(0.50, 0.68))
         angle = float(rng.uniform(-11.0, 11.0))
         flip = bool(rng.integers(0, 2))
-        place_botanical(leaf_sprites[(i + 2) % len(leaf_sprites)], cx, by, scale, angle, flip, 0.60)
+        place_botanical(leaf_sprites[(i + 2) % len(leaf_sprites)], cx, by, scale, angle, flip, 0.56)
 
-    # Gentle overall painterly softness + progressive knee-deep bokeh blur along bottom 30%
+    # Gentle overall painterly softness + progressive knee-deep bokeh blur along bottom 32%
     soft = np.array(
         Image.fromarray(canvas, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=0.7)),
         dtype=np.float32,
     )
     blurred = np.array(
-        Image.fromarray(canvas, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=3.0)),
+        Image.fromarray(canvas, mode='RGBA').filter(ImageFilter.GaussianBlur(radius=3.2)),
         dtype=np.float32,
     )
     y_coords = np.linspace(0.0, 1.0, target_h, dtype=np.float32)[:, None, None]
-    blur_t = np.clip((y_coords - 0.70) / 0.30, 0.0, 1.0)
+    blur_t = np.clip((y_coords - 0.68) / 0.32, 0.0, 1.0)
     mixed = soft * (1.0 - blur_t) + blurred * blur_t
     out_final = np.clip(np.round(mixed), 0, 255).astype(np.uint8)
     out_final = bleed_rgb_into_transparent(out_final, passes=14, alpha_thresh=16)
@@ -1236,32 +1772,62 @@ def main() -> int:
     # C. Backdrop & Foreground WebP Plates (with automatic quality step-down if >= 2.5 MB)
     backdrop_dir = inp / 'backdrop'
     citadel_main_raw = (
-        backdrop_dir / 'citadel-main-raw.png'
+        backdrop_dir / 'citadel-user-v4-raw.png'
+        if (backdrop_dir / 'citadel-user-v4-raw.png').exists()
+        else backdrop_dir / 'citadel-valley-v3-raw.png'
+        if (backdrop_dir / 'citadel-valley-v3-raw.png').exists()
+        else backdrop_dir / 'citadel-valley-v2-raw.png'
+        if (backdrop_dir / 'citadel-valley-v2-raw.png').exists()
+        else backdrop_dir / 'citadel-main-raw.png'
         if (backdrop_dir / 'citadel-main-raw.png').exists()
         else find_raw_file(backdrop_dir, 'citadel-raw')
     )
     citadel_hills_raw = (
-        backdrop_dir / 'citadel-hills-raw.png'
+        None
+        if citadel_main_raw.name.startswith(
+            ('citadel-user-v4-raw', 'citadel-valley-v3-raw', 'citadel-valley-v2-raw')
+        )
+        else backdrop_dir / 'citadel-hills-raw.png'
         if (backdrop_dir / 'citadel-hills-raw.png').exists()
         else None
     )
     ghost_raw = (
-        backdrop_dir / 'ghost-castle-vista-raw.png'
+        backdrop_dir / 'far-mountains-v2-raw.png'
+        if (backdrop_dir / 'far-mountains-v2-raw.png').exists()
+        else backdrop_dir / 'ghost-castle-vista-raw.png'
         if (backdrop_dir / 'ghost-castle-vista-raw.png').exists()
         else find_raw_file(backdrop_dir, 'ghost-castle-raw')
     )
-    watchtower_raw = find_raw_file(backdrop_dir, 'watchtower-raw')
-    clouds_raw = (
+    watchtower_raw = (
+        backdrop_dir / 'watchtower-sanctuary-v3-raw.png'
+        if (backdrop_dir / 'watchtower-sanctuary-v3-raw.png').exists()
+        else backdrop_dir / 'watchtower-cliff-v2-raw.png'
+        if (backdrop_dir / 'watchtower-cliff-v2-raw.png').exists()
+        else find_raw_file(backdrop_dir, 'watchtower-raw')
+    )
+    cloud_bank_raw = (
         backdrop_dir / 'clouds-rich-raw.png'
         if (backdrop_dir / 'clouds-rich-raw.png').exists()
         else find_raw_file(backdrop_dir, 'clouds-raw')
     )
-    cloud_wisps_raw = find_raw_file(backdrop_dir, 'cloud-wisps-raw')
+    clouds_raw = (
+        backdrop_dir / 'cloud-wisps-v2-raw.png'
+        if (backdrop_dir / 'cloud-wisps-v2-raw.png').exists()
+        else backdrop_dir / 'clouds-rich-raw.png'
+        if (backdrop_dir / 'clouds-rich-raw.png').exists()
+        else find_raw_file(backdrop_dir, 'clouds-raw')
+    )
+    cloud_wisps_raw = (
+        backdrop_dir / 'cloud-wisps-v2-raw.png'
+        if (backdrop_dir / 'cloud-wisps-v2-raw.png').exists()
+        else find_raw_file(backdrop_dir, 'cloud-wisps-raw')
+    )
 
     placements: dict[str, dict[str, float]] = {}
     plate_sizes: dict[str, int] = {}
     seam_diff = 0.0
     wisps_seam_diff = 0.0
+    sky_seam_diff = 0.0
     for quality in (86, 78):
         placements['citadel'], plate_sizes['citadel.webp'] = process_citadel(
             citadel_main_raw, citadel_hills_raw, out / 'backdrop' / 'citadel.webp', quality=quality
@@ -1277,6 +1843,12 @@ def main() -> int:
         )
         plate_sizes['cloud-wisps.webp'], wisps_seam_diff = process_cloud_wisps(
             cloud_wisps_raw, out / 'backdrop' / 'cloud-wisps.webp', quality=quality
+        )
+        plate_sizes['cloud-bank-right.webp'] = process_cloud_bank_right(
+            cloud_bank_raw, out / 'backdrop' / 'cloud-bank-right.webp', quality=quality
+        )
+        plate_sizes['celestial-sky.webp'], sky_seam_diff = process_celestial_sky(
+            out / 'backdrop' / 'celestial-sky.webp', quality=quality
         )
         plate_sizes['foreground-lip.webp'] = process_foreground_lip(
             leaves_raw, bells_raw, out / 'backdrop' / 'foreground-lip.webp', quality=quality
@@ -1326,6 +1898,8 @@ def main() -> int:
         'backdrop/watchtower.webp',
         'backdrop/clouds.webp',
         'backdrop/cloud-wisps.webp',
+        'backdrop/cloud-bank-right.webp',
+        'backdrop/celestial-sky.webp',
         'backdrop/foreground-lip.webp',
         'landmarks/about.png',
         'landmarks/works.png',
@@ -1337,7 +1911,7 @@ def main() -> int:
         print(f'  {rel:34s} {w:4d}x{h:<4d}  {p.stat().st_size:8d} bytes')
 
     print(f'\nTotal WebP backdrop payload: {total_webp / 1024:.1f} KB / {MAX_BACKDROP_WEBP_BYTES / 1024:.0f} KB budget')
-    print(f'clouds.webp seam delta: {seam_diff:.3f} | cloud-wisps.webp seam delta: {wisps_seam_diff:.3f}')
+    print(f'clouds.webp seam delta: {seam_diff:.3f} | cloud-wisps.webp seam delta: {wisps_seam_diff:.3f} | celestial-sky.webp seam delta: {sky_seam_diff:.3f}')
     print('\nManifest cropPixelsToManifest values:')
     print(json.dumps(placements, indent=2))
     return 0

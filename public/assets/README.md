@@ -45,4 +45,4 @@ Export all backdrop plates as **WebP with alpha** (`.png` paths are probed autom
 
 ## 5. Licensed Audio (`public/assets/audio/`)
 
-*   `public/assets/audio/theme.mp3` (primary `.mp3`/`.m4a`, optional `theme.ogg`): Looping `45` to `90` second orchestral track (`CC0`, `CC-BY`, commissioned, or original; never copyrighted *VP* tracks). Update `audioCredit` in `src/content/nodes.json` if required by license.
+*   `public/assets/audio/theme.opus` (primary `.opus`, with `.mp3`, `.m4a`, and `.ogg` codec fallbacks in `manifest.ts`): Looping `45` to `90` second orchestral track (`CC0`, `CC-BY`, commissioned, or original; never copyrighted *VP* tracks). Update `audioCredit` in `src/content/nodes.json` if required by license. When no BGM track is present yet, the engine runs the pre-baked 4s pink-noise wind bed (`wind-only`) cleanly.

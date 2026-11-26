@@ -25,6 +25,8 @@ export interface InputRouterDeps {
   onMouseParallax?: (normX: number, normY: number) => void;
   onToggleDebugGuides?: () => void;
   onCloseArchive?: () => void;
+  onAudioGesture?: () => void;
+  isInputBlocked?: () => boolean;
 }
 
 export interface InputRouterHandle {
@@ -33,7 +35,16 @@ export interface InputRouterHandle {
 }
 
 export function attachInputRouter(deps: InputRouterDeps): InputRouterHandle {
-  const { canvas, appState, getCamera, onMouseParallax, onToggleDebugGuides, onCloseArchive } = deps;
+  const {
+    canvas,
+    appState,
+    getCamera,
+    onMouseParallax,
+    onToggleDebugGuides,
+    onCloseArchive,
+    onAudioGesture,
+    isInputBlocked,
+  } = deps;
   const raycaster = new THREE.Raycaster();
   const ridgePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   const hitPoint = new THREE.Vector3();
@@ -60,6 +71,9 @@ export function attachInputRouter(deps: InputRouterDeps): InputRouterHandle {
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
+    if (isInputBlocked?.()) {
+      return;
+    }
     if (event.ctrlKey || event.metaKey || event.altKey) {
       return;
     }
@@ -138,6 +152,9 @@ export function attachInputRouter(deps: InputRouterDeps): InputRouterHandle {
   };
 
   const onPointerUp = (event: PointerEvent): void => {
+    if (isInputBlocked?.()) {
+      return;
+    }
     if (!event.isPrimary || event.pointerId !== activePointerId) {
       return;
     }
@@ -156,6 +173,9 @@ export function attachInputRouter(deps: InputRouterDeps): InputRouterHandle {
     const { mode, audioStatus } = appState.getState();
     if (mode === 'TITLE_IDLE') {
       appState.wakeAudioFromIdle();
+      if (appState.getState().audioStatus === 'PLAYING') {
+        onAudioGesture?.();
+      }
       return;
     }
     if (mode !== 'EXPLORING') {
@@ -164,6 +184,9 @@ export function attachInputRouter(deps: InputRouterDeps): InputRouterHandle {
 
     if (audioStatus === 'UNSTARTED') {
       appState.wakeAudioFromIdle();
+      if (appState.getState().audioStatus === 'PLAYING') {
+        onAudioGesture?.();
+      }
     }
 
     const rect = canvas.getBoundingClientRect();

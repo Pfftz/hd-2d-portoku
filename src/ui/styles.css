@@ -90,6 +90,12 @@ body {
   opacity: 1;
 }
 
+#audio-toggle-btn[data-audio-status='UNSTARTED'],
+#audio-toggle-btn[data-audio-status='MUTED'] {
+  border-color: rgba(123, 136, 152, 0.72);
+  color: var(--text-muted);
+}
+
 .jrpg-btn:focus-visible,
 .archive-link:focus-visible {
   outline: 2px solid var(--accent-focus);
@@ -210,6 +216,7 @@ body {
 
 #debug-overlay {
   position: absolute;
+  z-index: 40;
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
   max-width: min(460px, calc(100vw - 24px));
@@ -239,9 +246,65 @@ body {
   cursor: pointer;
 }
 
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background-color: var(--surface-bg);
+  opacity: 1;
+  transition: opacity 700ms ease;
+}
+
+#loading-screen.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(320px, 100%);
+  text-align: center;
+}
+
+.loading-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+}
+
+.loading-bar {
+  width: 100%;
+  height: 4px;
+  border: 1px solid rgba(123, 136, 152, 0.45);
+  background-color: rgba(20, 24, 32, 0.92);
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  background-color: var(--text-primary);
+  transition: width 160ms ease;
+}
+
+.loading-continue {
+  border-color: rgba(123, 136, 152, 0.6);
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hud-corner-controls .jrpg-btn,
-  #whisper-cue {
+  #whisper-cue,
+  #loading-screen,
+  .loading-bar-fill {
     transition: none;
   }
 }

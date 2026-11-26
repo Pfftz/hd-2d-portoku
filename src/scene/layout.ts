@@ -14,8 +14,8 @@ export const MAX_CAMERA_PAN = 16;
 export const BASE_TARGET_Y = 2.85;
 export const HORIZON_Y = 0.35;
 export const PORTRAIT_VERTICAL_OVERDRAW = 1.65;
-export const HERO_WORLD_WIDTH = 3.0;
-export const HERO_WORLD_HEIGHT = 3.0;
+export const HERO_WORLD_WIDTH = 2.85;
+export const HERO_WORLD_HEIGHT = 2.85;
 
 export const MASTER_CANVAS_WIDTH = 3840;
 export const MASTER_CANVAS_HEIGHT = 1600;
@@ -63,7 +63,7 @@ export function sampleRidge(t: number): RidgePoint {
   const clamped = clamp(t, 0, 1);
   return {
     x: (clamped - 0.5) * RIDGE_LENGTH,
-    y: 0.35 * (clamped - 0.5) + 0.25 * Math.sin(Math.PI * clamped),
+    y: 1.85 * (clamped - 0.5) + 0.25 * Math.sin(Math.PI * clamped),
     z: -0.3 * Math.sin(Math.PI * (clamped - 0.5)),
   };
 }

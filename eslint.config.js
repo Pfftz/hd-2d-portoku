@@ -20,6 +20,8 @@ const browserGlobals = {
   URL: 'readonly',
   URLSearchParams: 'readonly',
   AudioContext: 'readonly',
+  fetch: 'readonly',
+  HTMLAudioElement: 'readonly',
 };
 
 const nodeGlobals = {
